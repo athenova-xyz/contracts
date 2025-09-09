@@ -19,6 +19,7 @@ contract Crowdfund {
     // Book-keeping
     uint256 public raisedAmount;
     mapping(address => uint256) public contributions;
+    bool public fundsClaimed;
 
     // Campaign state
     enum State {
@@ -83,13 +84,18 @@ contract Crowdfund {
     }
 
     // Add this function
+    event FundsClaimed(address indexed creator, uint256 amount);
+
     function claimFunds() external checkCampaignStatus {
         require(currentState == State.Successful, "Campaign was not successful");
         require(msg.sender == creator, "Only creator can claim");
+        require(!fundsClaimed, "Funds already claimed");
 
         uint256 balance = acceptedToken.balanceOf(address(this));
+        fundsClaimed = true; // effects before interactions to avoid reentrancy
         bool sent = acceptedToken.transfer(creator, balance);
         require(sent, "Token transfer failed");
+        emit FundsClaimed(creator, balance);
     }
 
     // Add this function

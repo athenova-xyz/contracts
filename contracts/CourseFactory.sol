@@ -18,17 +18,17 @@ contract CourseFactory {
     );
 
     function createCourse(
+        address acceptedToken,
         uint256 fundingGoal,
         uint256 deadline
     ) external returns (address) {
+        require(acceptedToken != address(0), "Token address must be non-zero");
         require(fundingGoal > 0, "Funding goal must be > 0");
         require(deadline > block.timestamp, "Deadline must be in the future");
         // Compute duration from provided absolute deadline
         uint256 duration = deadline - block.timestamp;
-        // Note: For now, we pass the creator address as a non-zero placeholder for acceptedToken
-        // because token selection is out of scope for this factory test.
         Crowdfund newCourse = new Crowdfund(
-            msg.sender, // acceptedToken (placeholder non-zero address)
+            acceptedToken,
             fundingGoal,
             duration,
             msg.sender // creator
