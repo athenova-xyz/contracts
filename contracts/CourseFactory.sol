@@ -19,13 +19,14 @@ contract CourseFactory {
 
     function createCourse(
         uint256 fundingGoal,
-        uint256 deadline,
-        address creator
+        uint256 deadline
     ) external returns (address) {
-        Crowdfund newCourse = new Crowdfund();
+    require(fundingGoal > 0, "Funding goal must be > 0");
+    require(deadline > block.timestamp, "Deadline must be in the future");
+        Crowdfund newCourse = new Crowdfund(msg.sender);
         address courseAddress = address(newCourse);
         deployedCourses.push(courseAddress);
-        emit CourseCreated(courseAddress, creator, fundingGoal, deadline);
+        emit CourseCreated(courseAddress, msg.sender, fundingGoal, deadline);
         return courseAddress;
     }
 }

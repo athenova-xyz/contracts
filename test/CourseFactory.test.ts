@@ -11,7 +11,7 @@ describe("CourseFactory", function () {
   }
 
   it("Should allow a user to create a new course", async function () {
-    const { courseFactory, creator } = await loadFixture(deployFactoryFixture);
+    const { courseFactory, owner } = await loadFixture(deployFactoryFixture);
 
     const fundingGoal = 1000n;
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
@@ -19,7 +19,6 @@ describe("CourseFactory", function () {
     const txHash = await courseFactory.write.createCourse([
       fundingGoal,
       deadline,
-      creator.account.address,
     ]);
 
     const publicClient = await hre.viem.getPublicClient();
@@ -30,14 +29,40 @@ describe("CourseFactory", function () {
     expect(events.length).to.equal(1);
     const evtArgs = events[0].args as any; // { courseAddress, creator, fundingGoal, deadline }
     expect(getAddress(evtArgs.creator)).to.equal(
-      getAddress(creator.account.address)
+      getAddress(owner.account.address)
     );
     expect(evtArgs.fundingGoal).to.equal(fundingGoal);
 
     // Verify the deployed course is stored (index 0)
     // For a public dynamic array Solidity creates a getter: deployedCourses(uint256) -> address
-  const firstCourse = await courseFactory.read.deployedCourses([0n]);
-  expect(getAddress(firstCourse)).to.equal(getAddress(evtArgs.courseAddress));
-  expect(firstCourse).to.not.equal("0x0000000000000000000000000000000000000000");
+    const firstCourse = await courseFactory.read.deployedCourses([0n]);
+    expect(getAddress(firstCourse)).to.equal(
+      getAddress(evtArgs.courseAddress)
+    );
+    expect(firstCourse).to.not.equal(
+      "0x0000000000000000000000000000000000000000"
+    );
+  });
+
+  it("Should revert if funding goal is zero", async function () {
+  const { courseFactory, creator } = await loadFixture(deployFactoryFixture);
+
+    const fundingGoal = 0n;
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
+
+    await expect(
+      (courseFactory as any).write.createCourse([fundingGoal, deadline])
+    ).to.be.rejectedWith("Funding goal must be > 0");
+  });
+
+  it("Should revert if deadline is not in the future", async function () {
+  const { courseFactory, creator } = await loadFixture(deployFactoryFixture);
+
+    const fundingGoal = 1000n;
+    const pastDeadline = BigInt(Math.floor(Date.now() / 1000) - 60); // 1 min ago
+
+    await expect(
+      (courseFactory as any).write.createCourse([fundingGoal, pastDeadline])
+    ).to.be.rejectedWith("Deadline must be in the future");
   });
 });
