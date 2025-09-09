@@ -2,12 +2,14 @@
 pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title Crowdfund
  * @dev Token-based crowdfunding contract with finalization logic.
  */
 contract Crowdfund {
+    using SafeERC20 for IERC20;
     // Core campaign parameters
     IERC20 public immutable acceptedToken;
     address public immutable creator;
@@ -79,21 +81,25 @@ contract Crowdfund {
     /**
      * @notice Pledge tokens toward the campaign while it is funding.
      * Caller must approve this contract to transfer `amount` tokens beforehand.
+     * Note: Supports fee-on-transfer tokens by accounting based on the actual
+     *       amount received by this contract (post-transfer balance delta).
      */
     function pledge(uint256 amount) external autoUpdateCampaignStatus {
         require(currentState == State.Funding, "Not funding");
         require(block.timestamp < deadline, "Past deadline");
         require(amount > 0, "amount=0");
 
-        // Effects first
-        contributions[msg.sender] += amount;
-        totalPledged += amount;
+        // Interactions first to measure actual received (supports FoT tokens)
+        uint256 beforeBal = acceptedToken.balanceOf(address(this));
+        acceptedToken.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 afterBal = acceptedToken.balanceOf(address(this));
+        uint256 actualReceived = afterBal - beforeBal;
 
-        // Interactions
-        bool ok = acceptedToken.transferFrom(msg.sender, address(this), amount);
-        require(ok, "transferFrom failed");
+        // Effects: account by actual received amount
+        contributions[msg.sender] += actualReceived;
+        totalPledged += actualReceived;
 
-        emit Pledged(msg.sender, amount);
+        emit Pledged(msg.sender, actualReceived);
     }
 
     function claimFunds() external autoUpdateCampaignStatus {
