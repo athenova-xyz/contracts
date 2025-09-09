@@ -5,9 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title Crowdfund
- * @dev Token-based crowdfunding contract with simple finalization logic.
- * Backers pledge ERC20 tokens toward a funding goal before a deadline.
- * If successful, creator can claim funds; otherwise backers can refund.
+ * @dev Token-based crowdfunding contract with finalization logic.
  */
 contract Crowdfund {
     // Core campaign parameters
@@ -17,7 +15,7 @@ contract Crowdfund {
     uint256 public immutable deadline; // timestamp
 
     // Book-keeping
-    uint256 public raisedAmount;
+    uint256 public totalPledged;
     mapping(address => uint256) public contributions;
     bool public fundsClaimed;
 
@@ -27,15 +25,15 @@ contract Crowdfund {
         Successful,
         Failed
     }
-
     State public currentState = State.Funding;
 
-    /**
-     * @param _acceptedToken ERC20 token accepted for pledges
-     * @param _fundingGoal Minimum amount required for success
-     * @param _durationSeconds Duration in seconds for the campaign
-     * @param _creator Address that can claim funds on success
-     */
+    // Events
+    event Pledged(address indexed backer, uint256 amount);
+    event CampaignSuccessful(uint256 totalPledged);
+    event CampaignFailed(uint256 totalPledged);
+    event FundsClaimed(address indexed creator, uint256 amount);
+    event RefundClaimed(address indexed backer, uint256 amount);
+
     constructor(
         address _acceptedToken,
         uint256 _fundingGoal,
@@ -53,15 +51,28 @@ contract Crowdfund {
         deadline = block.timestamp + _durationSeconds;
     }
 
-    // Add this modifier
-    modifier checkCampaignStatus() {
-        if (currentState == State.Funding) {
-            if (block.timestamp >= deadline) {
-                currentState = raisedAmount >= fundingGoal
-                    ? State.Successful
-                    : State.Failed;
+    // Internal helper to update campaign state based on deadline and goal
+    function _updateCampaignStatus() internal {
+        if (currentState == State.Funding && block.timestamp >= deadline) {
+            if (totalPledged >= fundingGoal) {
+                currentState = State.Successful;
+                emit CampaignSuccessful(totalPledged);
+            } else {
+                currentState = State.Failed;
+                emit CampaignFailed(totalPledged);
             }
         }
+    }
+
+    // Public function to trigger state transition after deadline
+    function checkCampaignStatus() external {
+        require(block.timestamp >= deadline, "Too early");
+        _updateCampaignStatus();
+    }
+
+    // Modifier to auto-update status on function entry
+    modifier autoUpdateCampaignStatus() {
+        _updateCampaignStatus();
         _;
     }
 
@@ -69,24 +80,23 @@ contract Crowdfund {
      * @notice Pledge tokens toward the campaign while it is funding.
      * Caller must approve this contract to transfer `amount` tokens beforehand.
      */
-    function pledge(uint256 amount) external checkCampaignStatus {
+    function pledge(uint256 amount) external autoUpdateCampaignStatus {
         require(currentState == State.Funding, "Not funding");
         require(block.timestamp < deadline, "Past deadline");
         require(amount > 0, "amount=0");
 
         // Effects first
         contributions[msg.sender] += amount;
-        raisedAmount += amount;
+        totalPledged += amount;
 
         // Interactions
         bool ok = acceptedToken.transferFrom(msg.sender, address(this), amount);
         require(ok, "transferFrom failed");
+
+        emit Pledged(msg.sender, amount);
     }
 
-    // Add this function
-    event FundsClaimed(address indexed creator, uint256 amount);
-
-    function claimFunds() external checkCampaignStatus {
+    function claimFunds() external autoUpdateCampaignStatus {
         require(currentState == State.Successful, "Campaign was not successful");
         require(msg.sender == creator, "Only creator can claim");
         require(!fundsClaimed, "Funds already claimed");
@@ -98,8 +108,7 @@ contract Crowdfund {
         emit FundsClaimed(creator, balance);
     }
 
-    // Add this function
-    function refund() external checkCampaignStatus {
+    function claimRefund() public autoUpdateCampaignStatus {
         require(currentState == State.Failed, "Campaign did not fail");
 
         uint256 amountToRefund = contributions[msg.sender];
@@ -108,5 +117,11 @@ contract Crowdfund {
         contributions[msg.sender] = 0;
         bool sent = acceptedToken.transfer(msg.sender, amountToRefund);
         require(sent, "Token transfer failed");
+        emit RefundClaimed(msg.sender, amountToRefund);
+    }
+
+    // Backwards-compatible alias
+    function refund() external {
+        claimRefund();
     }
 }
