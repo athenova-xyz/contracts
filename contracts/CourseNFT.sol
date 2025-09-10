@@ -15,7 +15,10 @@ contract CourseNFT is ERC721, Ownable {
         string memory name,
         string memory symbol,
         address initialOwner
-    ) ERC721(name, symbol) Ownable(initialOwner) {}
+    ) ERC721(name, symbol) {
+        require(initialOwner != address(0), "Initial owner cannot be zero address");
+        transferOwnership(initialOwner);
+    }
 
     /**
      * @dev Mints a new Course Access NFT to a specific learner.

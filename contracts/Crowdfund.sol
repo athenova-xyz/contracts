@@ -3,12 +3,13 @@ pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 /**
  * @title Crowdfund
  * @dev Token-based crowdfunding contract with finalization logic.
  */
-contract Crowdfund {
+contract Crowdfund is ReentrancyGuard {
     using SafeERC20 for IERC20;
     // Core campaign parameters
     IERC20 public immutable acceptedToken;
@@ -84,7 +85,7 @@ contract Crowdfund {
      * Note: Supports fee-on-transfer tokens by accounting based on the actual
      *       amount received by this contract (post-transfer balance delta).
      */
-    function pledge(uint256 amount) external autoUpdateCampaignStatus {
+    function pledge(uint256 amount) external autoUpdateCampaignStatus nonReentrant {
         require(currentState == State.Funding, "Not funding");
         require(block.timestamp < deadline, "Past deadline");
         require(amount > 0, "amount=0");
@@ -102,28 +103,28 @@ contract Crowdfund {
         emit Pledged(msg.sender, actualReceived);
     }
 
-    function claimFunds() external autoUpdateCampaignStatus {
+    function claimFunds() external autoUpdateCampaignStatus nonReentrant {
         require(currentState == State.Successful, "Campaign was not successful");
         require(msg.sender == creator, "Only creator can claim");
         require(!fundsClaimed, "Funds already claimed");
 
-        uint256 balance = acceptedToken.balanceOf(address(this));
-        fundsClaimed = true; // effects before interactions to avoid reentrancy
-        bool sent = acceptedToken.transfer(creator, balance);
-        require(sent, "Token transfer failed");
-        emit FundsClaimed(creator, balance);
+    uint256 balance = acceptedToken.balanceOf(address(this));
+    fundsClaimed = true; // effects before interactions to avoid reentrancy
+    // use SafeERC20 to support non-standard tokens that do not return bool
+    acceptedToken.safeTransfer(creator, balance);
+    emit FundsClaimed(creator, balance);
     }
 
-    function claimRefund() public autoUpdateCampaignStatus {
+    function claimRefund() public autoUpdateCampaignStatus nonReentrant {
         require(currentState == State.Failed, "Campaign did not fail");
 
         uint256 amountToRefund = contributions[msg.sender];
         require(amountToRefund > 0, "No contribution to refund");
 
-        contributions[msg.sender] = 0;
-        bool sent = acceptedToken.transfer(msg.sender, amountToRefund);
-        require(sent, "Token transfer failed");
-        emit RefundClaimed(msg.sender, amountToRefund);
+    contributions[msg.sender] = 0;
+    // use SafeERC20 to support non-standard tokens that do not return bool
+    acceptedToken.safeTransfer(msg.sender, amountToRefund);
+    emit RefundClaimed(msg.sender, amountToRefund);
     }
 
     // Backwards-compatible alias
