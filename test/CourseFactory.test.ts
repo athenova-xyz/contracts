@@ -15,16 +15,12 @@ describe("CourseFactory", function () {
   }
 
   it("Should allow a user to create a new course", async function () {
-  const { courseFactory, owner, token } = await loadFixture(deployFactoryFixture);
-
+    const { courseFactory, owner, token } = await loadFixture(deployFactoryFixture);
     const fundingGoal = 1000n;
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
 
-  const txHash = await (courseFactory as any).write.createCourse([
+    const txHash = await (courseFactory as any).write.createCourse([
       token.address,
-      fundingGoal,
-      deadline,
-    ]);
 
     const publicClient = await hre.viem.getPublicClient();
     await publicClient.waitForTransactionReceipt({ hash: txHash });
@@ -50,24 +46,22 @@ describe("CourseFactory", function () {
   });
 
   it("Should revert if funding goal is zero", async function () {
-  const { courseFactory, creator, token } = await loadFixture(deployFactoryFixture);
-
+    const { courseFactory, creator, token } = await loadFixture(deployFactoryFixture);
     const fundingGoal = 0n;
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
 
     await expect(
-  (courseFactory as any).write.createCourse([token.address, fundingGoal, deadline])
+    (courseFactory as any).write.createCourse([token.address, fundingGoal, deadline])
     ).to.be.rejectedWith("Funding goal must be > 0");
   });
 
   it("Should revert if deadline is not in the future", async function () {
-  const { courseFactory, creator, token } = await loadFixture(deployFactoryFixture);
-
+    const { courseFactory, creator, token } = await loadFixture(deployFactoryFixture);
     const fundingGoal = 1000n;
     const pastDeadline = BigInt(Math.floor(Date.now() / 1000) - 60); // 1 min ago
 
     await expect(
-  (courseFactory as any).write.createCourse([token.address, fundingGoal, pastDeadline])
+      (courseFactory as any).write.createCourse([token.address, fundingGoal, pastDeadline])
     ).to.be.rejectedWith("Deadline must be in the future");
   });
 });
