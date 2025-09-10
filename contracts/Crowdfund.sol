@@ -10,6 +10,12 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.
  * @dev Token-based crowdfunding contract with finalization logic.
  */
 contract Crowdfund is ReentrancyGuard {
+/**
+ * @title Crowdfund
+ * @dev Token-based crowdfunding contract with simple finalization logic.
+ * Backers pledge ERC20 tokens toward a funding goal before a deadline.
+ * If successful, creator can claim funds; otherwise backers can refund.
+ */
     using SafeERC20 for IERC20;
     // Core campaign parameters
     IERC20 public immutable acceptedToken;
@@ -76,7 +82,6 @@ contract Crowdfund is ReentrancyGuard {
     // Modifier to auto-update status on function entry
     modifier autoUpdateCampaignStatus() {
         _updateCampaignStatus();
-        _;
     }
 
     /**
@@ -107,28 +112,20 @@ contract Crowdfund is ReentrancyGuard {
         require(currentState == State.Successful, "Campaign was not successful");
         require(msg.sender == creator, "Only creator can claim");
         require(!fundsClaimed, "Funds already claimed");
-
-    uint256 balance = acceptedToken.balanceOf(address(this));
-    fundsClaimed = true; // effects before interactions to avoid reentrancy
-    // use SafeERC20 to support non-standard tokens that do not return bool
-    acceptedToken.safeTransfer(creator, balance);
-    emit FundsClaimed(creator, balance);
+        uint256 balance = acceptedToken.balanceOf(address(this));
+        fundsClaimed = true; // effects before interactions to avoid reentrancy
+        // use SafeERC20 to support non-standard tokens that do not return bool
+        acceptedToken.safeTransfer(creator, balance);
+        emit FundsClaimed(creator, balance);
     }
 
     function claimRefund() public autoUpdateCampaignStatus nonReentrant {
         require(currentState == State.Failed, "Campaign did not fail");
-
         uint256 amountToRefund = contributions[msg.sender];
         require(amountToRefund > 0, "No contribution to refund");
-
-    contributions[msg.sender] = 0;
-    // use SafeERC20 to support non-standard tokens that do not return bool
-    acceptedToken.safeTransfer(msg.sender, amountToRefund);
-    emit RefundClaimed(msg.sender, amountToRefund);
-    }
-
-    // Backwards-compatible alias
-    function refund() external {
-        claimRefund();
+        contributions[msg.sender] = 0;
+        // use SafeERC20 to support non-standard tokens that do not return bool
+        acceptedToken.safeTransfer(msg.sender, amountToRefund);
+        emit RefundClaimed(msg.sender, amountToRefund);
     }
 }
