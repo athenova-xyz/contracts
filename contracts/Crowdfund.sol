@@ -5,23 +5,25 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
+interface IInvestorNFT {
+    function safeMint(address to, uint256 tokenId) external;
+}
+
 /**
  * @title Crowdfund
  * @dev Token-based crowdfunding contract with finalization logic.
  */
 contract Crowdfund is ReentrancyGuard {
-/**
- * @title Crowdfund
- * @dev Token-based crowdfunding contract with simple finalization logic.
- * Backers pledge ERC20 tokens toward a funding goal before a deadline.
- * If successful, creator can claim funds; otherwise backers can refund.
- */
     using SafeERC20 for IERC20;
     // Core campaign parameters
     IERC20 public immutable acceptedToken;
     address public immutable creator;
     uint256 public immutable fundingGoal;
     uint256 public immutable deadline; // timestamp
+
+    // Investor NFT contract and token id counter
+    IInvestorNFT public investorNFT;
+    uint256 private _nextTokenId;
 
     // Book-keeping
     uint256 public totalPledged;
@@ -42,22 +44,28 @@ contract Crowdfund is ReentrancyGuard {
     event CampaignFailed(uint256 totalPledged);
     event FundsClaimed(address indexed creator, uint256 amount);
     event RefundClaimed(address indexed backer, uint256 amount);
+    event InvestorNftMinted(address indexed backer, uint256 tokenId);
 
     constructor(
         address _acceptedToken,
         uint256 _fundingGoal,
         uint256 _durationSeconds,
-        address _creator
+        address _creator,
+        address _investorNftAddress
     ) {
         require(_acceptedToken != address(0), "token addr zero");
         require(_creator != address(0), "creator addr zero");
         require(_fundingGoal > 0, "goal=0");
         require(_durationSeconds > 0, "duration=0");
+        require(_investorNftAddress != address(0), "nft addr zero");
 
         acceptedToken = IERC20(_acceptedToken);
         fundingGoal = _fundingGoal;
         creator = _creator;
         deadline = block.timestamp + _durationSeconds;
+
+        investorNFT = IInvestorNFT(_investorNftAddress);
+        _nextTokenId = 1;
     }
 
     // Internal helper to update campaign state based on deadline and goal
@@ -82,6 +90,7 @@ contract Crowdfund is ReentrancyGuard {
     // Modifier to auto-update status on function entry
     modifier autoUpdateCampaignStatus() {
         _updateCampaignStatus();
+        _;
     }
 
     /**
@@ -105,7 +114,13 @@ contract Crowdfund is ReentrancyGuard {
         contributions[msg.sender] += actualReceived;
         totalPledged += actualReceived;
 
+        // Mint unique Investor NFT to backer. If mint fails, whole tx (including transfer) reverts.
+        uint256 tokenId = _nextTokenId;
+        investorNFT.safeMint(msg.sender, tokenId);
+        _nextTokenId = tokenId + 1;
+
         emit Pledged(msg.sender, actualReceived);
+        emit InvestorNftMinted(msg.sender, tokenId);
     }
 
     function claimFunds() external autoUpdateCampaignStatus nonReentrant {

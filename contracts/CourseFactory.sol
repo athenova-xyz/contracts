@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.0;
 
 import "./Crowdfund.sol";
 
@@ -17,25 +17,36 @@ contract CourseFactory {
         uint256 deadline
     );
 
+    // Option A: if you want the factory to store a default InvestorNFT address,
+    // uncomment the following and set it in the factory constructor:
+    // address public investorNftDefault;
+    //
+    // constructor(address _investorNftDefault) {
+    //     require(_investorNftDefault != address(0), "nft addr zero");
+    //     investorNftDefault = _investorNftDefault;
+    // }
+
+    // Changed createCourse to accept investorNftAddress and forward it to Crowdfund
     function createCourse(
-        address acceptedToken,
-        uint256 fundingGoal,
-        uint256 deadline
-    ) external returns (address) {
-        require(acceptedToken != address(0), "Token address must be non-zero");
-        require(fundingGoal > 0, "Funding goal must be > 0");
-        require(deadline > block.timestamp, "Deadline must be in the future");
-        // Compute duration from provided absolute deadline
-        uint256 duration = deadline - block.timestamp;
+        address token,
+        uint256 goal,
+        uint256 duration,
+        address creator,
+        address investorNftAddress
+    ) public returns (address) {
+        require(investorNftAddress != address(0), "nft addr zero");
         Crowdfund newCourse = new Crowdfund(
-            acceptedToken,
-            fundingGoal,
+            token,
+            goal,
             duration,
-            msg.sender // creator
+            creator,
+            investorNftAddress
         );
+
         address courseAddress = address(newCourse);
         deployedCourses.push(courseAddress);
-        emit CourseCreated(courseAddress, msg.sender, fundingGoal, deadline);
-        return courseAddress;
+        emit CourseCreated(courseAddress, creator, goal, duration);
+
+        return address(newCourse);
     }
 }
