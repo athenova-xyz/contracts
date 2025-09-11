@@ -57,6 +57,7 @@ contract Crowdfund is ReentrancyGuard {
     event FundsClaimed(address indexed creator, uint256 amount);
     event RefundClaimed(address indexed backer, uint256 amount);
     event InvestorNftMinted(address indexed backer, uint256 tokenId);
+    event MintFailed(address indexed backer, uint256 tokenId);
     event MilestoneVoted(address indexed voter, uint256 indexed milestoneIndex, uint256 voteWeight);
     event MilestoneFundsReleased(uint256 indexed milestoneIndex, uint256 amount);
 
@@ -156,13 +157,17 @@ contract Crowdfund is ReentrancyGuard {
         contributions[msg.sender] += actualReceived;
         totalPledged += actualReceived;
 
-        // Mint unique Investor NFT to backer. If mint fails, whole tx (including transfer) reverts.
+        // Mint unique Investor NFT to backer
         uint256 tokenId = _nextTokenId;
-        investorNFT.safeMint(msg.sender, tokenId);
-        _nextTokenId = tokenId + 1;
+        try investorNFT.safeMint(msg.sender, tokenId) {
+            _nextTokenId = tokenId + 1;
+            emit InvestorNftMinted(msg.sender, tokenId);
+        } catch {
+            // Log minting failure but don't block pledge
+            emit MintFailed(msg.sender, tokenId);
+        }
 
         emit Pledged(msg.sender, actualReceived);
-        emit InvestorNftMinted(msg.sender, tokenId);
     }
 
     /**
