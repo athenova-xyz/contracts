@@ -9,8 +9,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * @dev Simple ERC721 where only the owner can mint via safeMint.
  */
 contract InvestorNFT is ERC721, Ownable {
-    constructor(string memory name_, string memory symbol_, address owner_) ERC721(name_, symbol_) {
-        _transferOwnership(owner_);
+    constructor(string memory name_, string memory symbol_, address owner_) ERC721(name_, symbol_) Ownable(owner_) {
+        // Ownership initialized via Ownable base constructor (OpenZeppelin v5)
     }
 
     /**

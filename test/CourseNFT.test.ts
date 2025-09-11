@@ -51,6 +51,6 @@ describe("CourseNFT", function () {
 
     await expect(
       contractAsOther.write.safeMint([owner.account.address, tokenId])
-    ).to.be.rejectedWith("Ownable: caller is not the owner");
+    ).to.be.rejectedWith("OwnableUnauthorizedAccount");
   });
 });

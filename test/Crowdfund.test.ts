@@ -98,7 +98,7 @@ describe("Crowdfund with InvestorNFT integration", function () {
       investorNft.write.safeMint([attacker.account.address, 999n], {
         account: attacker.account,
       })
-    ).to.be.rejectedWith("Ownable: caller is not the owner");
+    ).to.be.rejectedWith("OwnableUnauthorizedAccount");
   });
 });
 
