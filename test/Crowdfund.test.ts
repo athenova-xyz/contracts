@@ -17,6 +17,7 @@ describe("Crowdfund with InvestorNFT integration", function () {
     const investorNft = await hre.viem.deployContract("InvestorNFT", [
       "Investor Share",
       "INV",
+      deployer.account.address,
     ]);
 
     // Deploy Crowdfund with simple milestones for backwards compatibility
@@ -117,6 +118,7 @@ async function deployCrowdfundFixture() {
   const investorNft = await hre.viem.deployContract("InvestorNFT", [
     "Investor Share",
     "INV",
+    creator.account.address,
   ]);
 
   // Deploy Crowdfund with simple milestones for backwards compatibility

@@ -10,6 +10,7 @@ describe("InvestorNFT", function () {
     const investorNFT = await hre.viem.deployContract("InvestorNFT", [
       "Athenova Investor Share",
       "AIS",
+      owner.account.address,
     ]);
 
     return { investorNFT, owner, otherAccount };

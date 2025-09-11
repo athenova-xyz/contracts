@@ -14,6 +14,7 @@ describe("CourseFactory", function () {
     const investorNFT = await hre.viem.deployContract("InvestorNFT", [
       "Investor NFT",
       "INFT",
+      owner.account.address,
     ]);
     return { courseFactory, owner, creator, token, investorNFT };
   }

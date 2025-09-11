@@ -14,7 +14,8 @@ async function main() {
     // Deploy InvestorNFT
     const investorNft = await hre.viem.deployContract("InvestorNFT", [
         "Investor Share",
-        "INV"
+        "INV",
+        deployer.account.address
     ]);
     console.log("InvestorNFT:", investorNft.address);
 
