@@ -39,7 +39,7 @@ contract Crowdfund is ReentrancyGuard {
     bool public fundsClaimed;
 
     // Milestone system
-    Milestone[] public milestones;
+    Milestone[] private milestones;
     uint256 public totalMilestoneFunds;
 
     // Campaign state
