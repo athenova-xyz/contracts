@@ -45,7 +45,8 @@ contract CourseFactory {
 
         address courseAddress = address(newCourse);
         deployedCourses.push(courseAddress);
-        emit CourseCreated(courseAddress, creator, goal, duration);
+        uint256 deadline = block.timestamp + duration;
+        emit CourseCreated(courseAddress, creator, goal, deadline);
 
         return address(newCourse);
     }
