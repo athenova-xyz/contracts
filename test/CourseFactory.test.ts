@@ -11,19 +11,29 @@ describe("CourseFactory", function () {
       "Mock Token",
       "MOCK",
     ]);
-    return { courseFactory, owner, creator, token };
+    const investorNFT = await hre.viem.deployContract("InvestorNFT", [
+      "Investor NFT",
+      "INFT",
+      owner.account.address,
+    ]);
+    return { courseFactory, owner, creator, token, investorNFT };
   }
 
   it("Should allow a user to create a new course", async function () {
-  const { courseFactory, owner, token } = await loadFixture(deployFactoryFixture);
+    const { courseFactory, owner, token, investorNFT } = await loadFixture(deployFactoryFixture);
 
     const fundingGoal = 1000n;
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
+    const duration = 30n * 24n * 60n * 60n; // 30 days in seconds
+    const milestoneDescriptions = ["Complete project"];
+    const milestonePayouts = [fundingGoal];
 
     const txHash = await (courseFactory as any).write.createCourse([
       token.address,
       fundingGoal,
-      deadline,
+      duration,
+      investorNFT.address,
+      milestoneDescriptions,
+      milestonePayouts,
     ]);
 
     const publicClient = await hre.viem.getPublicClient();
@@ -50,23 +60,42 @@ describe("CourseFactory", function () {
   });
 
   it("Should revert if funding goal is zero", async function () {
-    const { courseFactory, creator, token } = await loadFixture(deployFactoryFixture);
+    const { courseFactory, creator, token, investorNFT } = await loadFixture(deployFactoryFixture);
 
     const fundingGoal = 0n;
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
+    const duration = 7n * 24n * 60n * 60n; // 7 days in seconds
+    const milestoneDescriptions = ["Complete project"];
+    const milestonePayouts = [100n]; // Non-zero payout
 
     await expect(
-    (courseFactory as any).write.createCourse([token.address, fundingGoal, deadline])
-    ).to.be.rejectedWith("Funding goal must be > 0");
+      (courseFactory as any).write.createCourse([
+        token.address,
+        fundingGoal,
+        duration,
+        investorNFT.address,
+        milestoneDescriptions,
+        milestonePayouts
+      ])
+    ).to.be.rejectedWith("goal=0");
   });
 
   it("Should revert if deadline is not in the future", async function () {
-    const { courseFactory, creator, token } = await loadFixture(deployFactoryFixture);
+    const { courseFactory, creator, token, investorNFT } = await loadFixture(deployFactoryFixture);
     const fundingGoal = 1000n;
-    const pastDeadline = BigInt(Math.floor(Date.now() / 1000) - 60); // 1 min ago
+    const zeroDuration = 0n; // Duration of 0 should be rejected
+    const milestoneDescriptions = ["Complete project"];
+    const milestonePayouts = [fundingGoal];
 
+    // This should fail because duration=0 is not allowed
     await expect(
-    (courseFactory as any).write.createCourse([token.address, fundingGoal, pastDeadline])
-    ).to.be.rejectedWith("Deadline must be in the future");
+      (courseFactory as any).write.createCourse([
+        token.address,
+        fundingGoal,
+        zeroDuration,
+        investorNFT.address,
+        milestoneDescriptions,
+        milestonePayouts
+      ])
+    ).to.be.rejectedWith("duration=0");
   });
 });

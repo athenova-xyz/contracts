@@ -50,7 +50,7 @@ describe("InvestorNFT", function () {
       { client: { wallet: otherAccount } }
     );
 
-    // OpenZeppelin v5 Ownable uses a custom error: OwnableUnauthorizedAccount(address)
+    // OpenZeppelin v4.9.6 Ownable uses the old error message
     await expect(
       contractAsOther.write.safeMint([owner.account.address, tokenId])
     ).to.be.rejectedWith("OwnableUnauthorizedAccount");

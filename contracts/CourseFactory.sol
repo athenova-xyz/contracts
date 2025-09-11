@@ -17,25 +17,54 @@ contract CourseFactory {
         uint256 deadline
     );
 
+    // Option A: if you want the factory to store a default InvestorNFT address,
+    // uncomment the following and set it in the factory constructor:
+    // address public investorNftDefault;
+    //
+    // constructor(address _investorNftDefault) {
+    //     require(_investorNftDefault != address(0), "nft addr zero");
+    //     investorNftDefault = _investorNftDefault;
+    // }
+
+    // Changed createCourse to accept investorNftAddress and milestone data
     function createCourse(
-        address acceptedToken,
-        uint256 fundingGoal,
-        uint256 deadline
+        address token,
+        uint256 goal,
+        uint256 duration,
+        address investorNftAddress,
+        string[] calldata milestoneDescriptions,
+        uint256[] calldata milestonePayouts
     ) external returns (address) {
-        require(acceptedToken != address(0), "Token address must be non-zero");
-        require(fundingGoal > 0, "Funding goal must be > 0");
-        require(deadline > block.timestamp, "Deadline must be in the future");
-        // Compute duration from provided absolute deadline
-        uint256 duration = deadline - block.timestamp;
+        // Input validation
+        require(token != address(0), "token addr zero");
+        require(goal > 0, "goal=0");
+        require(duration > 0, "duration=0");
+        require(investorNftAddress != address(0), "nft addr zero");
+        require(milestoneDescriptions.length == milestonePayouts.length, "milestone len mismatch");
+        require(milestonePayouts.length > 0, "no milestones");
+        
+        // Validate milestone payouts don't exceed goal
+        uint256 totalPayout = 0;
+        for (uint256 i = 0; i < milestonePayouts.length; i++) {
+            totalPayout += milestonePayouts[i];
+        }
+        require(totalPayout <= goal, "payouts exceed goal");
+        
         Crowdfund newCourse = new Crowdfund(
-            acceptedToken,
-            fundingGoal,
+            token,
+            goal,
             duration,
-            msg.sender // creator
+            msg.sender, // creator is the caller, prevents spoofing
+            investorNftAddress,
+            milestoneDescriptions,
+            milestonePayouts
         );
+
         address courseAddress = address(newCourse);
         deployedCourses.push(courseAddress);
-        emit CourseCreated(courseAddress, msg.sender, fundingGoal, deadline);
+        uint256 deadline = block.timestamp + duration;
+        emit CourseCreated(courseAddress, msg.sender, goal, deadline);
+
         return courseAddress;
     }
 }
