@@ -89,6 +89,8 @@ contract Crowdfund is ReentrancyGuard {
         uint256 totalPayouts = 0;
         for (uint256 i = 0; i < _milestoneDescriptions.length; i++) {
             require(_milestonePayouts[i] > 0, "milestone payout must be > 0");
+            // ensure milestone has a non-empty human-readable description
+            require(bytes(_milestoneDescriptions[i]).length > 0, "milestone description empty");
             totalPayouts += _milestonePayouts[i];
             
             milestones.push();
@@ -99,7 +101,12 @@ contract Crowdfund is ReentrancyGuard {
             milestone.approvalVotes = 0;
         }
         
-        require(totalPayouts <= _fundingGoal, "milestone payouts exceed funding goal");
+    // Allow totalPayouts to be <= funding goal. Any leftover funds after
+    // milestone disbursements remain in escrow and can be claimed via the
+    // normal `claimFunds()` flow once all milestones are released. If the
+    // design requires full allocation of the funding goal to milestones,
+    // change this to `totalPayouts == _fundingGoal`.
+    require(totalPayouts <= _fundingGoal, "milestone payouts exceed funding goal");
         totalMilestoneFunds = totalPayouts;
     }
 

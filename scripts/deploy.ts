@@ -32,6 +32,12 @@ async function main() {
         400000000000000000000n  // 400 tokens for milestone 2 (total = 1000)
     ];
 
+    // Note: the contract allows total milestone payouts to be <= fundingGoal.
+    // Any leftover funds (fundingGoal - sum(milestonePayouts)) will remain in
+    // escrow and can be claimed by the creator through `claimFunds()` after
+    // all milestones are released. Change milestones to exactly sum to the
+    // fundingGoal if full allocation is required by your policy.
+
     const crowdfund = await hre.viem.deployContract("Crowdfund", [
         token.address,
         fundingGoal,
