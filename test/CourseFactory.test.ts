@@ -23,6 +23,8 @@ describe("CourseFactory", function () {
 
     const fundingGoal = 1000n;
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
+    const milestoneDescriptions = ["Complete project"];
+    const milestonePayouts = [fundingGoal];
 
     const txHash = await (courseFactory as any).write.createCourse([
       token.address,
@@ -30,6 +32,8 @@ describe("CourseFactory", function () {
       deadline,
       owner.account.address,
       investorNFT.address,
+      milestoneDescriptions,
+      milestonePayouts,
     ]);
 
     const publicClient = await hre.viem.getPublicClient();
@@ -60,9 +64,11 @@ describe("CourseFactory", function () {
 
     const fundingGoal = 0n;
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
+    const milestoneDescriptions = ["Complete project"];
+    const milestonePayouts = [100n]; // Non-zero payout
 
     await expect(
-      (courseFactory as any).write.createCourse([token.address, fundingGoal, deadline, creator.account.address, investorNFT.address])
+      (courseFactory as any).write.createCourse([token.address, fundingGoal, deadline, creator.account.address, investorNFT.address, milestoneDescriptions, milestonePayouts])
     ).to.be.rejectedWith("goal=0");
   });
 
@@ -70,6 +76,8 @@ describe("CourseFactory", function () {
     const { courseFactory, creator, token, investorNFT } = await loadFixture(deployFactoryFixture);
     const fundingGoal = 1000n;
     const pastDeadline = BigInt(Math.floor(Date.now() / 1000) - 60); // 1 min ago
+    const milestoneDescriptions = ["Complete project"];
+    const milestonePayouts = [fundingGoal];
 
     // Note: The current contract doesn't validate deadline, so this test may pass
     // If you want deadline validation, add it to the Crowdfund constructor
@@ -78,7 +86,9 @@ describe("CourseFactory", function () {
       fundingGoal,
       pastDeadline,
       creator.account.address,
-      investorNFT.address
+      investorNFT.address,
+      milestoneDescriptions,
+      milestonePayouts
     ]);
 
     // Just verify the transaction succeeded since there's no deadline validation currently

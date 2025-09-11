@@ -26,13 +26,15 @@ contract CourseFactory {
     //     investorNftDefault = _investorNftDefault;
     // }
 
-    // Changed createCourse to accept investorNftAddress and forward it to Crowdfund
+    // Changed createCourse to accept investorNftAddress and milestone data
     function createCourse(
         address token,
         uint256 goal,
         uint256 duration,
         address creator,
-        address investorNftAddress
+        address investorNftAddress,
+        string[] memory milestoneDescriptions,
+        uint256[] memory milestonePayouts
     ) public returns (address) {
         require(investorNftAddress != address(0), "nft addr zero");
         Crowdfund newCourse = new Crowdfund(
@@ -40,7 +42,9 @@ contract CourseFactory {
             goal,
             duration,
             creator,
-            investorNftAddress
+            investorNftAddress,
+            milestoneDescriptions,
+            milestonePayouts
         );
 
         address courseAddress = address(newCourse);
