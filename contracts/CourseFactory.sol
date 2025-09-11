@@ -31,17 +31,30 @@ contract CourseFactory {
         address token,
         uint256 goal,
         uint256 duration,
-        address creator,
         address investorNftAddress,
-        string[] memory milestoneDescriptions,
-        uint256[] memory milestonePayouts
-    ) public returns (address) {
+        string[] calldata milestoneDescriptions,
+        uint256[] calldata milestonePayouts
+    ) external returns (address) {
+        // Input validation
+        require(token != address(0), "token addr zero");
+        require(goal > 0, "goal=0");
+        require(duration > 0, "duration=0");
         require(investorNftAddress != address(0), "nft addr zero");
+        require(milestoneDescriptions.length == milestonePayouts.length, "milestone len mismatch");
+        require(milestonePayouts.length > 0, "no milestones");
+        
+        // Validate milestone payouts don't exceed goal
+        uint256 totalPayout = 0;
+        for (uint256 i = 0; i < milestonePayouts.length; i++) {
+            totalPayout += milestonePayouts[i];
+        }
+        require(totalPayout <= goal, "payouts exceed goal");
+        
         Crowdfund newCourse = new Crowdfund(
             token,
             goal,
             duration,
-            creator,
+            msg.sender, // creator is the caller, prevents spoofing
             investorNftAddress,
             milestoneDescriptions,
             milestonePayouts
@@ -50,8 +63,8 @@ contract CourseFactory {
         address courseAddress = address(newCourse);
         deployedCourses.push(courseAddress);
         uint256 deadline = block.timestamp + duration;
-        emit CourseCreated(courseAddress, creator, goal, deadline);
+        emit CourseCreated(courseAddress, msg.sender, goal, deadline);
 
-        return address(newCourse);
+        return courseAddress;
     }
 }

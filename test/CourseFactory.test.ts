@@ -22,15 +22,14 @@ describe("CourseFactory", function () {
     const { courseFactory, owner, token, investorNFT } = await loadFixture(deployFactoryFixture);
 
     const fundingGoal = 1000n;
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
+    const duration = 30n * 24n * 60n * 60n; // 30 days in seconds
     const milestoneDescriptions = ["Complete project"];
     const milestonePayouts = [fundingGoal];
 
     const txHash = await (courseFactory as any).write.createCourse([
       token.address,
       fundingGoal,
-      deadline,
-      owner.account.address,
+      duration,
       investorNFT.address,
       milestoneDescriptions,
       milestonePayouts,
@@ -63,37 +62,39 @@ describe("CourseFactory", function () {
     const { courseFactory, creator, token, investorNFT } = await loadFixture(deployFactoryFixture);
 
     const fundingGoal = 0n;
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
+    const duration = 7n * 24n * 60n * 60n; // 7 days in seconds
     const milestoneDescriptions = ["Complete project"];
     const milestonePayouts = [100n]; // Non-zero payout
 
     await expect(
-      (courseFactory as any).write.createCourse([token.address, fundingGoal, deadline, creator.account.address, investorNFT.address, milestoneDescriptions, milestonePayouts])
+      (courseFactory as any).write.createCourse([
+        token.address,
+        fundingGoal,
+        duration,
+        investorNFT.address,
+        milestoneDescriptions,
+        milestonePayouts
+      ])
     ).to.be.rejectedWith("goal=0");
   });
 
   it("Should revert if deadline is not in the future", async function () {
     const { courseFactory, creator, token, investorNFT } = await loadFixture(deployFactoryFixture);
     const fundingGoal = 1000n;
-    const pastDeadline = BigInt(Math.floor(Date.now() / 1000) - 60); // 1 min ago
+    const zeroDuration = 0n; // Duration of 0 should be rejected
     const milestoneDescriptions = ["Complete project"];
     const milestonePayouts = [fundingGoal];
 
-    // Note: The current contract doesn't validate deadline, so this test may pass
-    // If you want deadline validation, add it to the Crowdfund constructor
-    const txHash = await (courseFactory as any).write.createCourse([
-      token.address,
-      fundingGoal,
-      pastDeadline,
-      creator.account.address,
-      investorNFT.address,
-      milestoneDescriptions,
-      milestonePayouts
-    ]);
-
-    // Just verify the transaction succeeded since there's no deadline validation currently
-    const publicClient = await hre.viem.getPublicClient();
-    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-    expect(receipt.status).to.equal("success");
+    // This should fail because duration=0 is not allowed
+    await expect(
+      (courseFactory as any).write.createCourse([
+        token.address,
+        fundingGoal,
+        zeroDuration,
+        investorNFT.address,
+        milestoneDescriptions,
+        milestonePayouts
+      ])
+    ).to.be.rejectedWith("duration=0");
   });
 });
