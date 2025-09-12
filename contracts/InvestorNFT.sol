@@ -1,32 +1,21 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
  * @title InvestorNFT
- * @dev An ERC721 token representing a backer's unique share in a course.
- * The right to mint these tokens is restricted to the contract owner,
- * which will be the main crowdfunding contract.
+ * @dev Simple ERC721 where only the owner can mint via safeMint.
  */
 contract InvestorNFT is ERC721, Ownable {
-    constructor(
-        string memory name,
-        string memory symbol,
-        address initialOwner
-    ) ERC721(name, symbol) Ownable(_msgSender()) {
-        require(initialOwner != address(0), "Initial owner cannot be zero address");
-        transferOwnership(initialOwner);
+    constructor(string memory name_, string memory symbol_) ERC721(name_, symbol_) {
     }
 
     /**
-     * @dev Mints a new Investor Share NFT to a specific backer.
-     * Can only be called by the owner of this contract.
-     * @param to The address of the backer receiving the NFT.
-     * @param tokenId A unique ID for the token being minted.
+     * @notice safeMint can only be called by owner (Crowdfund after ownership transfer).
      */
-    function safeMint(address to, uint256 tokenId) public onlyOwner {
+    function safeMint(address to, uint256 tokenId) external onlyOwner {
         _safeMint(to, tokenId);
     }
 }
