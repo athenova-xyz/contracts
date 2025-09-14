@@ -5,7 +5,7 @@ async function main() {
     console.log("Deploying with", deployer.account.address);
 
     // Deploy test token (or your real token) and mint if required
-    const token = await hre.viem.deployContract("MockERC20", [
+    const token = await hre.viem.deployContract("ERC20Mock", [
         "TestToken",
         "TT"
     ]);
