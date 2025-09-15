@@ -8,7 +8,7 @@ describe("Crowdfund with InvestorNFT integration", function () {
     const [deployer, backer, attacker] = await hre.viem.getWalletClients();
 
     // Deploy ERC20Mock
-    const token = await hre.viem.deployContract("MockERC20", [
+    const token = await hre.viem.deployContract("ERC20Mock", [
       "TestToken",
       "TT",
     ]);
@@ -109,7 +109,7 @@ async function deployCrowdfundFixture() {
   const [creator, backer, other] = await hre.viem.getWalletClients();
 
   // Deploy ERC20Mock
-  const mockToken = await hre.viem.deployContract("MockERC20", [
+  const mockToken = await hre.viem.deployContract("ERC20Mock", [
     "Mock Token",
     "MOCK",
   ]);

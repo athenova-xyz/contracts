@@ -7,7 +7,7 @@ describe("CourseFactory", function () {
   async function deployFactoryFixture() {
     const [owner, creator] = await hre.viem.getWalletClients();
     const courseFactory = await hre.viem.deployContract("CourseFactory");
-    const token = await hre.viem.deployContract("MockERC20", [
+    const token = await hre.viem.deployContract("ERC20Mock", [
       "Mock Token",
       "MOCK",
     ]);
