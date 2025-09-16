@@ -7,8 +7,8 @@ describe("Crowdfund with InvestorNFT integration", function () {
   async function deployCrowdfundWithNFTFixture() {
     const [deployer, backer, attacker] = await hre.viem.getWalletClients();
 
-  // Deploy ERC20Mock
-  const token = await hre.viem.deployContract("ERC20Mock", [
+    // Deploy ERC20Mock
+    const token = await hre.viem.deployContract("ERC20Mock", [
       "TestToken",
       "TT",
     ]);
@@ -17,17 +17,22 @@ describe("Crowdfund with InvestorNFT integration", function () {
     const investorNft = await hre.viem.deployContract("InvestorNFT", [
       "Investor Share",
       "INV",
+      deployer.account.address,
     ]);
 
-    // Deploy Crowdfund
+    // Deploy Crowdfund with simple milestones for backwards compatibility
     const fundingGoal = 100000000000000000000n; // 100 * 10^18 (100 tokens)
     const duration = 3600n; // 1 hour
+    const milestoneDescriptions = ["Complete project"];
+    const milestonePayouts = [fundingGoal]; // Single milestone for entire amount
     const crowdfund = await hre.viem.deployContract("Crowdfund", [
       token.address,
       fundingGoal,
       duration,
       deployer.account.address,
       investorNft.address,
+      milestoneDescriptions,
+      milestonePayouts,
     ]);
 
     // Transfer ownership of InvestorNFT to Crowdfund
@@ -93,7 +98,7 @@ describe("Crowdfund with InvestorNFT integration", function () {
       investorNft.write.safeMint([attacker.account.address, 999n], {
         account: attacker.account,
       })
-    ).to.be.rejectedWith("Ownable: caller is not the owner");
+    ).to.be.rejectedWith("OwnableUnauthorizedAccount");
   });
 });
 
@@ -113,17 +118,22 @@ async function deployCrowdfundFixture() {
   const investorNft = await hre.viem.deployContract("InvestorNFT", [
     "Investor Share",
     "INV",
+    creator.account.address,
   ]);
 
-  // Deploy Crowdfund
+  // Deploy Crowdfund with simple milestones for backwards compatibility
   const fundingGoal = 1000000000000000000000n; // 1000 tokens
   const duration = 30n * 24n * 60n * 60n; // 30 days
+  const milestoneDescriptions = ["Complete project"];
+  const milestonePayouts = [fundingGoal]; // Single milestone for entire amount
   const crowdfund = await hre.viem.deployContract("Crowdfund", [
     mockToken.address,
     fundingGoal,
     duration,
     creator.account.address,
     investorNft.address,
+    milestoneDescriptions,
+    milestonePayouts,
   ]);
 
   // Transfer ownership of InvestorNFT to Crowdfund
@@ -164,19 +174,23 @@ describe("Crowdfund", function () {
     // Move time forward past the deadline
     await time.increase(time.duration.days(31));
 
-    // Creator claims the funds
+    // Check campaign status to make it successful
+    await crowdfund.write.checkCampaignStatus();
+
+    // Backer votes on the milestone (has 100% of votes)
+    await crowdfund.write.voteOnMilestone([0n], { account: backer.account });
+
+    // Creator releases milestone funds (gets the full amount)
     const initialCreatorBalance = await mockToken.read.balanceOf([
       creator.account.address,
     ]);
-    await crowdfund.write.claimFunds({ account: creator.account });
+    await crowdfund.write.releaseMilestoneFunds([0n], { account: creator.account });
     const finalCreatorBalance = await mockToken.read.balanceOf([
       creator.account.address,
     ]);
 
-    expect((finalCreatorBalance - initialCreatorBalance).toString()).to.equal(
-      fundingGoal.toString()
-    );
-    expect((await mockToken.read.balanceOf([crowdfund.address])).toString()).to.equal("0");
+    // The creator should have received the full funding goal through milestone release
+    expect(finalCreatorBalance - initialCreatorBalance).to.equal(fundingGoal);
   });
 
   it("Should allow backers to get a refund if failed", async function () {

@@ -10,6 +10,7 @@ describe("InvestorNFT", function () {
     const investorNFT = await hre.viem.deployContract("InvestorNFT", [
       "Athenova Investor Share",
       "AIS",
+      owner.account.address,
     ]);
 
     return { investorNFT, owner, otherAccount };
@@ -52,6 +53,6 @@ describe("InvestorNFT", function () {
     // OpenZeppelin v4.9.6 Ownable uses the old error message
     await expect(
       contractAsOther.write.safeMint([owner.account.address, tokenId])
-    ).to.be.rejectedWith("Ownable: caller is not the owner");
+    ).to.be.rejectedWith("OwnableUnauthorizedAccount");
   });
 });

@@ -3,10 +3,18 @@ pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 interface IInvestorNFT {
     function safeMint(address to, uint256 tokenId) external;
+}
+
+struct Milestone {
+    string description;
+    uint256 payoutAmount;
+    bool released;
+    uint256 approvalVotes;
+    mapping(address => bool) hasVoted;
 }
 
 /**
@@ -30,6 +38,10 @@ contract Crowdfund is ReentrancyGuard {
     mapping(address => uint256) public contributions;
     bool public fundsClaimed;
 
+    // Milestone system
+    Milestone[] private milestones;
+    uint256 public totalMilestoneFunds;
+
     // Campaign state
     enum State {
         Funding,
@@ -45,19 +57,26 @@ contract Crowdfund is ReentrancyGuard {
     event FundsClaimed(address indexed creator, uint256 amount);
     event RefundClaimed(address indexed backer, uint256 amount);
     event InvestorNftMinted(address indexed backer, uint256 tokenId);
+    event MintFailed(address indexed backer, uint256 tokenId);
+    event MilestoneVoted(address indexed voter, uint256 indexed milestoneIndex, uint256 voteWeight);
+    event MilestoneFundsReleased(uint256 indexed milestoneIndex, uint256 amount);
 
     constructor(
         address _acceptedToken,
         uint256 _fundingGoal,
         uint256 _durationSeconds,
         address _creator,
-        address _investorNftAddress
+        address _investorNftAddress,
+        string[] memory _milestoneDescriptions,
+        uint256[] memory _milestonePayouts
     ) {
         require(_acceptedToken != address(0), "token addr zero");
         require(_creator != address(0), "creator addr zero");
         require(_fundingGoal > 0, "goal=0");
         require(_durationSeconds > 0, "duration=0");
         require(_investorNftAddress != address(0), "nft addr zero");
+        require(_milestoneDescriptions.length == _milestonePayouts.length, "milestone arrays length mismatch");
+        require(_milestoneDescriptions.length > 0, "no milestones provided");
 
         acceptedToken = IERC20(_acceptedToken);
         fundingGoal = _fundingGoal;
@@ -66,6 +85,30 @@ contract Crowdfund is ReentrancyGuard {
 
         investorNFT = IInvestorNFT(_investorNftAddress);
         _nextTokenId = 1;
+
+        // Initialize milestones
+        uint256 totalPayouts = 0;
+        for (uint256 i = 0; i < _milestoneDescriptions.length; i++) {
+            require(_milestonePayouts[i] > 0, "milestone payout must be > 0");
+            // ensure milestone has a non-empty human-readable description
+            require(bytes(_milestoneDescriptions[i]).length > 0, "milestone description empty");
+            totalPayouts += _milestonePayouts[i];
+            
+            milestones.push();
+            Milestone storage milestone = milestones[i];
+            milestone.description = _milestoneDescriptions[i];
+            milestone.payoutAmount = _milestonePayouts[i];
+            milestone.released = false;
+            milestone.approvalVotes = 0;
+        }
+        
+    // Allow totalPayouts to be <= funding goal. Any leftover funds after
+    // milestone disbursements remain in escrow and can be claimed via the
+    // normal `claimFunds()` flow once all milestones are released. If the
+    // design requires full allocation of the funding goal to milestones,
+    // change this to `totalPayouts == _fundingGoal`.
+    require(totalPayouts <= _fundingGoal, "milestone payouts exceed funding goal");
+        totalMilestoneFunds = totalPayouts;
     }
 
     // Internal helper to update campaign state based on deadline and goal
@@ -114,20 +157,105 @@ contract Crowdfund is ReentrancyGuard {
         contributions[msg.sender] += actualReceived;
         totalPledged += actualReceived;
 
-        // Mint unique Investor NFT to backer. If mint fails, whole tx (including transfer) reverts.
+        // Mint unique Investor NFT to backer
         uint256 tokenId = _nextTokenId;
-        investorNFT.safeMint(msg.sender, tokenId);
-        _nextTokenId = tokenId + 1;
+        try investorNFT.safeMint(msg.sender, tokenId) {
+            _nextTokenId = tokenId + 1;
+            emit InvestorNftMinted(msg.sender, tokenId);
+        } catch {
+            // Log minting failure but don't block pledge
+            emit MintFailed(msg.sender, tokenId);
+        }
 
         emit Pledged(msg.sender, actualReceived);
-        emit InvestorNftMinted(msg.sender, tokenId);
+    }
+
+    /**
+     * @notice Vote on a milestone with weight based on contribution amount.
+     * Only backers who have contributed can vote, and only once per milestone.
+     */
+    function voteOnMilestone(uint256 _milestoneIndex) external autoUpdateCampaignStatus nonReentrant {
+        require(currentState == State.Successful, "Campaign must be successful to vote");
+        require(_milestoneIndex < milestones.length, "Invalid milestone index");
+        require(contributions[msg.sender] > 0, "Must be a backer to vote");
+        require(!milestones[_milestoneIndex].hasVoted[msg.sender], "Already voted on this milestone");
+        require(!milestones[_milestoneIndex].released, "Milestone already released");
+
+        uint256 voteWeight = contributions[msg.sender];
+        milestones[_milestoneIndex].approvalVotes += voteWeight;
+        milestones[_milestoneIndex].hasVoted[msg.sender] = true;
+
+        emit MilestoneVoted(msg.sender, _milestoneIndex, voteWeight);
+    }
+
+    /**
+     * @notice Release milestone funds to creator if majority threshold is met.
+     * Only creator can call this function.
+     */
+    function releaseMilestoneFunds(uint256 _milestoneIndex) external autoUpdateCampaignStatus nonReentrant {
+        require(currentState == State.Successful, "Campaign must be successful");
+        require(msg.sender == creator, "Only creator can release funds");
+        require(_milestoneIndex < milestones.length, "Invalid milestone index");
+        require(!milestones[_milestoneIndex].released, "Milestone already released");
+
+        Milestone storage milestone = milestones[_milestoneIndex];
+        
+        // Check if majority threshold (> 50% of totalPledged) is met
+        require(milestone.approvalVotes > totalPledged / 2, "Insufficient votes for release");
+
+        milestone.released = true;
+        uint256 payoutAmount = milestone.payoutAmount;
+
+        // Transfer milestone funds to creator
+        acceptedToken.safeTransfer(creator, payoutAmount);
+        
+        emit MilestoneFundsReleased(_milestoneIndex, payoutAmount);
+    }
+
+    /**
+     * @notice Get milestone information (excluding the mapping)
+     */
+    function getMilestone(uint256 _milestoneIndex) external view returns (
+        string memory description,
+        uint256 payoutAmount,
+        bool released,
+        uint256 approvalVotes
+    ) {
+        require(_milestoneIndex < milestones.length, "Invalid milestone index");
+        Milestone storage milestone = milestones[_milestoneIndex];
+        return (milestone.description, milestone.payoutAmount, milestone.released, milestone.approvalVotes);
+    }
+
+    /**
+     * @notice Check if an address has voted on a specific milestone
+     */
+    function hasVotedOnMilestone(uint256 _milestoneIndex, address voter) external view returns (bool) {
+        require(_milestoneIndex < milestones.length, "Invalid milestone index");
+        return milestones[_milestoneIndex].hasVoted[voter];
+    }
+
+    /**
+     * @notice Get the total number of milestones
+     */
+    function getMilestoneCount() external view returns (uint256) {
+        return milestones.length;
     }
 
     function claimFunds() external autoUpdateCampaignStatus nonReentrant {
         require(currentState == State.Successful, "Campaign was not successful");
         require(msg.sender == creator, "Only creator can claim");
         require(!fundsClaimed, "Funds already claimed");
+        
+        // If milestones exist, only allow claiming remaining funds after all milestones are released
+        if (milestones.length > 0) {
+            for (uint256 i = 0; i < milestones.length; i++) {
+                require(milestones[i].released, "All milestones must be released first");
+            }
+        }
+        
         uint256 balance = acceptedToken.balanceOf(address(this));
+        require(balance > 0, "No funds to claim");
+        
         fundsClaimed = true; // effects before interactions to avoid reentrancy
         // use SafeERC20 to support non-standard tokens that do not return bool
         acceptedToken.safeTransfer(creator, balance);

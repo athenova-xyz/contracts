@@ -26,28 +26,45 @@ contract CourseFactory {
     //     investorNftDefault = _investorNftDefault;
     // }
 
-    // Changed createCourse to accept investorNftAddress and forward it to Crowdfund
+    // Changed createCourse to accept investorNftAddress and milestone data
     function createCourse(
         address token,
         uint256 goal,
         uint256 duration,
-        address creator,
-        address investorNftAddress
-    ) public returns (address) {
+        address investorNftAddress,
+        string[] calldata milestoneDescriptions,
+        uint256[] calldata milestonePayouts
+    ) external returns (address) {
+        // Input validation
+        require(token != address(0), "token addr zero");
+        require(goal > 0, "goal=0");
+        require(duration > 0, "duration=0");
         require(investorNftAddress != address(0), "nft addr zero");
+        require(milestoneDescriptions.length == milestonePayouts.length, "milestone len mismatch");
+        require(milestonePayouts.length > 0, "no milestones");
+        
+        // Validate milestone payouts don't exceed goal
+        uint256 totalPayout = 0;
+        for (uint256 i = 0; i < milestonePayouts.length; i++) {
+            totalPayout += milestonePayouts[i];
+        }
+        require(totalPayout <= goal, "payouts exceed goal");
+        
         Crowdfund newCourse = new Crowdfund(
             token,
             goal,
             duration,
-            creator,
-            investorNftAddress
+            msg.sender, // creator is the caller, prevents spoofing
+            investorNftAddress,
+            milestoneDescriptions,
+            milestonePayouts
         );
 
         address courseAddress = address(newCourse);
         deployedCourses.push(courseAddress);
         uint256 deadline = block.timestamp + duration;
-        emit CourseCreated(courseAddress, creator, goal, deadline);
+        emit CourseCreated(courseAddress, msg.sender, goal, deadline);
 
-        return address(newCourse);
+        return courseAddress;
     }
 }
