@@ -4,12 +4,9 @@ on:
   push:
     branches:
       - main
-      - develop
-      - feature/**
-      - chore/**
   pull_request:
     branches:
-      - "**"
+      - main
 
 jobs:
   test:
@@ -22,8 +19,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          # Pin to a predictable Node 18.x LTS version compatible with Hardhat
-          node-version: "18.17.1"
+          # Use a supported Node LTS release (20.x) and enable npm cache
+          node-version: "20"
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
