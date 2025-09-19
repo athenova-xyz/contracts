@@ -56,6 +56,8 @@ contract Crowdfund is ReentrancyGuard {
     uint256 public totalBackerPool;
     // tracks how much each backer already withdrew from the backer pool
     mapping(address => uint256) public backerWithdrawn;
+    // aggregate sum of all backer withdrawals to protect pool reserves
+    uint256 public backerPaidOutTotal;
 
     // Book-keeping
     uint256 public totalPledged;
@@ -220,22 +222,28 @@ contract Crowdfund is ReentrancyGuard {
     // allocates backer share to the backer pool for later withdrawal.
     function _distributeRevenue(uint256 amount) internal {
         if (amount == 0) return;
-
         uint256 creatorAmt = (amount * creatorShare) / FEE_DENOMINATOR;
         uint256 backerAmt = (amount * backerShare) / FEE_DENOMINATOR;
-        uint256 platformAmt = amount - creatorAmt - backerAmt; // ensure remainder to platform
+        uint256 platformAmt = (amount * platformShare) / FEE_DENOMINATOR;
 
-        // Transfer creator and platform shares immediately
+        // Explicit dust handling so rounding behavior is deterministic.
+        // Policy: allocate dust to backers (fairness). Change if platform should absorb dust.
+        uint256 dust = amount - creatorAmt - backerAmt - platformAmt;
+        if (dust > 0) {
+            backerAmt += dust;
+        }
+
+        // Effects first: reserve backer allocation before external transfers
+        if (backerAmt > 0) {
+            totalBackerPool += backerAmt;
+        }
+
+        // Interactions: transfer creator and platform shares
         if (creatorAmt > 0) {
             acceptedToken.safeTransfer(creator, creatorAmt);
         }
         if (platformAmt > 0) {
             acceptedToken.safeTransfer(platformWallet, platformAmt);
-        }
-
-        // Add backer allocation to pool (pull model for backers)
-        if (backerAmt > 0) {
-            totalBackerPool += backerAmt;
         }
     }
 
@@ -257,9 +265,16 @@ contract Crowdfund is ReentrancyGuard {
 
         uint256 payout = entitled - already;
         backerWithdrawn[msg.sender] = already + payout;
+        // update aggregate paid out to keep liability accounting accurate
+        backerPaidOutTotal += payout;
 
         // Transfer payout
         acceptedToken.safeTransfer(msg.sender, payout);
+    }
+
+    // Helper returns outstanding liability reserved for backers
+    function _backerPoolLiability() internal view returns (uint256) {
+        return totalBackerPool - backerPaidOutTotal;
     }
 
     // Modifier to auto-update status on function entry
@@ -338,8 +353,13 @@ contract Crowdfund is ReentrancyGuard {
         milestone.released = true;
         uint256 payoutAmount = milestone.payoutAmount;
 
-        // Transfer milestone funds to creator
-        acceptedToken.safeTransfer(creator, payoutAmount);
+    // Ensure we do not drain funds reserved for backers
+    uint256 liability = _backerPoolLiability();
+    uint256 bal = acceptedToken.balanceOf(address(this));
+    require(bal >= liability + payoutAmount, "Insufficient free funds (reserved for backers)");
+
+    // Transfer milestone funds to creator
+    acceptedToken.safeTransfer(creator, payoutAmount);
         
         emit MilestoneFundsReleased(_milestoneIndex, payoutAmount);
     }
@@ -385,13 +405,16 @@ contract Crowdfund is ReentrancyGuard {
             }
         }
         
-        uint256 balance = acceptedToken.balanceOf(address(this));
-        require(balance > 0, "No funds to claim");
-        
+        uint256 bal = acceptedToken.balanceOf(address(this));
+        uint256 liability = _backerPoolLiability();
+        require(bal > liability, "All funds reserved for backers");
+
+        uint256 claimable = bal - liability;
+
         fundsClaimed = true; // effects before interactions to avoid reentrancy
         // use SafeERC20 to support non-standard tokens that do not return bool
-        acceptedToken.safeTransfer(creator, balance);
-        emit FundsClaimed(creator, balance);
+        acceptedToken.safeTransfer(creator, claimable);
+        emit FundsClaimed(creator, claimable);
     }
 
     function claimRefund() public autoUpdateCampaignStatus nonReentrant {
