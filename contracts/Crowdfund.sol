@@ -9,6 +9,11 @@ interface IInvestorNFT {
     function safeMint(address to, uint256 tokenId) external;
 }
 
+interface ICourseNFT {
+    function safeMint(address to, uint256 tokenId) external;
+    function owner() external view returns (address);
+}
+
 struct Milestone {
     string description;
     uint256 payoutAmount;
@@ -32,6 +37,25 @@ contract Crowdfund is ReentrancyGuard {
     // Investor NFT contract and token id counter
     IInvestorNFT public investorNFT;
     uint256 private _nextTokenId;
+
+    // Course NFT (for primary sales) and counters
+    ICourseNFT public courseNFT;
+    uint256 private _nextCourseTokenId;
+
+    // Primary sale economics
+    uint256 public coursePrice;
+    // Shares are expressed in basis points (parts per 10,000)
+    uint256 public constant FEE_DENOMINATOR = 10000;
+    uint256 public creatorShare; // e.g. 7000 = 70.00%
+    uint256 public backerShare;  // e.g. 2000 = 20.00%
+    uint256 public platformShare; // e.g. 1000 = 10.00%
+    address public platformWallet;
+
+    // Backer revenue accounting
+    // totalBackerPool is the cumulative amount allocated for backers
+    uint256 public totalBackerPool;
+    // tracks how much each backer already withdrew from the backer pool
+    mapping(address => uint256) public backerWithdrawn;
 
     // Book-keeping
     uint256 public totalPledged;
@@ -86,6 +110,9 @@ contract Crowdfund is ReentrancyGuard {
         investorNFT = IInvestorNFT(_investorNftAddress);
         _nextTokenId = 1;
 
+    // Default course-related values (can be set later if zero)
+    _nextCourseTokenId = 1;
+
         // Initialize milestones
         uint256 totalPayouts = 0;
         for (uint256 i = 0; i < _milestoneDescriptions.length; i++) {
@@ -128,6 +155,111 @@ contract Crowdfund is ReentrancyGuard {
     function checkCampaignStatus() external {
         require(block.timestamp >= deadline, "Too early");
         _updateCampaignStatus();
+    }
+
+    /**
+     * @notice Set course sale parameters. Only callable by the creator.
+     * @param _courseNftAddress Address of the CourseNFT contract
+     * @param _coursePrice Price in acceptedToken for a primary sale
+     * @param _creatorShare Basis points for creator
+     * @param _backerShare Basis points for backers
+     * @param _platformShare Basis points for platform
+     * @param _platformWallet Address to receive platform share
+     */
+    function setCourseSaleParams(
+        address _courseNftAddress,
+        uint256 _coursePrice,
+        uint256 _creatorShare,
+        uint256 _backerShare,
+        uint256 _platformShare,
+        address _platformWallet
+    ) external {
+        require(msg.sender == creator, "Only creator");
+        require(_courseNftAddress != address(0), "course nft zero");
+        require(_platformWallet != address(0), "platform zero");
+        require(_creatorShare + _backerShare + _platformShare == FEE_DENOMINATOR, "Shares must sum to denominator");
+        // Ensure the Crowdfund contract is the owner of the CourseNFT before enabling sales
+        require(ICourseNFT(_courseNftAddress).owner() == address(this), "Crowdfund must own CourseNFT");
+
+        courseNFT = ICourseNFT(_courseNftAddress);
+        coursePrice = _coursePrice;
+        creatorShare = _creatorShare;
+        backerShare = _backerShare;
+        platformShare = _platformShare;
+        platformWallet = _platformWallet;
+    }
+
+    /**
+     * @notice Purchase a course (primary sale). Buyer must approve coursePrice.
+     */
+    function purchaseCourse() external nonReentrant {
+        require(coursePrice > 0, "Course not for sale");
+        require(address(courseNFT) != address(0), "CourseNFT not set");
+
+        // Transfer course price from buyer to this contract
+        uint256 balanceBefore = acceptedToken.balanceOf(address(this));
+        acceptedToken.safeTransferFrom(msg.sender, address(this), coursePrice);
+        uint256 balanceAfter = acceptedToken.balanceOf(address(this));
+        uint256 actualReceived = balanceAfter - balanceBefore;
+        require(actualReceived == coursePrice, "Incorrect transferred amount");
+
+        // Mint CourseNFT to buyer
+        uint256 courseTokenId = _nextCourseTokenId;
+        try courseNFT.safeMint(msg.sender, courseTokenId) {
+            _nextCourseTokenId = courseTokenId + 1;
+        } catch {
+            // If minting fails, revert to avoid holding buyer funds without NFT
+            revert("CourseNFT mint failed");
+        }
+
+        // Distribute revenue according to shares
+        _distributeRevenue(actualReceived);
+    }
+
+    // Internal distribution: transfers creator and platform shares immediately,
+    // allocates backer share to the backer pool for later withdrawal.
+    function _distributeRevenue(uint256 amount) internal {
+        if (amount == 0) return;
+
+        uint256 creatorAmt = (amount * creatorShare) / FEE_DENOMINATOR;
+        uint256 backerAmt = (amount * backerShare) / FEE_DENOMINATOR;
+        uint256 platformAmt = amount - creatorAmt - backerAmt; // ensure remainder to platform
+
+        // Transfer creator and platform shares immediately
+        if (creatorAmt > 0) {
+            acceptedToken.safeTransfer(creator, creatorAmt);
+        }
+        if (platformAmt > 0) {
+            acceptedToken.safeTransfer(platformWallet, platformAmt);
+        }
+
+        // Add backer allocation to pool (pull model for backers)
+        if (backerAmt > 0) {
+            totalBackerPool += backerAmt;
+        }
+    }
+
+    /**
+     * @notice Withdraw a backer's accumulated share from the backer pool.
+     * The entitlement is proportional to their contributions / totalPledged.
+     */
+    function withdrawBackerRevenue() external nonReentrant {
+    require(totalBackerPool > 0, "No backer funds");
+        uint256 contributed = contributions[msg.sender];
+        require(contributed > 0, "No contribution");
+    require(totalPledged > 0, "No pledges");
+
+        // Calculate entitled amount based on current pool and contribution weight
+        // entitlement = totalBackerPool * contributed / totalPledged - alreadyWithdrawn
+        uint256 entitled = (totalBackerPool * contributed) / totalPledged;
+        uint256 already = backerWithdrawn[msg.sender];
+        if (entitled <= already) revert("Nothing to withdraw");
+
+        uint256 payout = entitled - already;
+        backerWithdrawn[msg.sender] = already + payout;
+
+        // Transfer payout
+        acceptedToken.safeTransfer(msg.sender, payout);
     }
 
     // Modifier to auto-update status on function entry
