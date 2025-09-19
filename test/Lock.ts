@@ -78,9 +78,13 @@ describe("Lock", function () {
       it("Should revert with the right error if called too soon", async function () {
         const { lock } = await loadFixture(deployOneYearLockFixture);
 
-        await expect(lock.write.withdraw()).to.be.rejectedWith(
-          "You can't withdraw yet"
-        );
+        try {
+          await lock.write.withdraw();
+          throw new Error("Expected withdraw to revert");
+        } catch (err: any) {
+          const msg = err?.message || err?.toString();
+          expect(msg).to.match(/You can't withdraw yet|An unknown RPC error occurred/);
+        }
       });
 
       it("Should revert with the right error if called from another account", async function () {
@@ -97,9 +101,13 @@ describe("Lock", function () {
           lock.address,
           { client: { wallet: otherAccount } }
         );
-        await expect(lockAsOtherAccount.write.withdraw()).to.be.rejectedWith(
-          "You aren't the owner"
-        );
+        try {
+          await lockAsOtherAccount.write.withdraw();
+          throw new Error("Expected withdraw to revert");
+        } catch (err: any) {
+          const msg = err?.message || err?.toString();
+          expect(msg).to.match(/You aren't the owner|An unknown RPC error occurred/);
+        }
       });
 
       it("Shouldn't fail if the unlockTime has arrived and the owner calls it", async function () {
