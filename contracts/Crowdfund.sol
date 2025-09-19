@@ -421,6 +421,12 @@ contract Crowdfund is ReentrancyGuard {
         require(currentState == State.Failed, "Campaign did not fail");
         uint256 amountToRefund = contributions[msg.sender];
         require(amountToRefund > 0, "No contribution to refund");
+        // Ensure refunds do not reduce contract balance below backers' outstanding liability
+        uint256 outstandingBackerLiability = _backerPoolLiability(); // totalBackerPool - backerPaidOutTotal
+        uint256 bal = acceptedToken.balanceOf(address(this));
+        // require that after refunding, contract still holds at least the outstanding liability
+        require(bal >= outstandingBackerLiability + amountToRefund, "Refund would impair backer pool");
+
         contributions[msg.sender] = 0;
         // use SafeERC20 to support non-standard tokens that do not return bool
         acceptedToken.safeTransfer(msg.sender, amountToRefund);
