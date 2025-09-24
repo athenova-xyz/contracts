@@ -3,6 +3,7 @@ import {
   loadFixture,
 } from "@nomicfoundation/hardhat-toolbox-viem/network-helpers";
 import { expect } from "chai";
+import { expectRevertWith } from "./helpers/revert";
 import hre from "hardhat";
 import { getAddress, parseGwei } from "viem";
 
@@ -78,13 +79,7 @@ describe("Lock", function () {
       it("Should revert with the right error if called too soon", async function () {
         const { lock } = await loadFixture(deployOneYearLockFixture);
 
-        try {
-          await lock.write.withdraw();
-          throw new Error("Expected withdraw to revert");
-        } catch (err: any) {
-          const msg = err?.message || err?.toString();
-          expect(msg).to.match(/You can't withdraw yet|An unknown RPC error occurred/);
-        }
+        await expectRevertWith(lock.write.withdraw(), "You can't withdraw yet");
       });
 
       it("Should revert with the right error if called from another account", async function () {
@@ -101,13 +96,7 @@ describe("Lock", function () {
           lock.address,
           { client: { wallet: otherAccount } }
         );
-        try {
-          await lockAsOtherAccount.write.withdraw();
-          throw new Error("Expected withdraw to revert");
-        } catch (err: any) {
-          const msg = err?.message || err?.toString();
-          expect(msg).to.match(/You aren't the owner|An unknown RPC error occurred/);
-        }
+        await expectRevertWith(lockAsOtherAccount.write.withdraw(), "You aren't the owner");
       });
 
       it("Shouldn't fail if the unlockTime has arrived and the owner calls it", async function () {
