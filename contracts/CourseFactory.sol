@@ -25,7 +25,10 @@ contract CourseFactory {
         uint256 duration,
         address investorNftAddress,
         string[] calldata milestoneDescriptions,
-        uint256[] calldata milestonePayouts
+        uint256[] calldata milestonePayouts,
+        address platformAdmin,
+        address platformWallet,
+        uint256 platformShareInit
     ) external returns (address) {
         // Input validation
         require(token != address(0), "token addr zero");
@@ -42,6 +45,10 @@ contract CourseFactory {
         }
         require(totalPayout <= goal, "payouts exceed goal");
         
+        require(platformAdmin != address(0), "platform admin zero");
+        require(platformWallet != address(0), "platform wallet zero");
+        require(platformShareInit <= 10000, "platform share too high");
+
         Crowdfund newCourse = new Crowdfund(
             token,
             goal,
@@ -49,7 +56,10 @@ contract CourseFactory {
             msg.sender, // creator is the caller, prevents spoofing
             investorNftAddress,
             milestoneDescriptions,
-            milestonePayouts
+            milestonePayouts,
+            platformAdmin,
+            platformWallet,
+            platformShareInit
         );
 
         address courseAddress = address(newCourse);
