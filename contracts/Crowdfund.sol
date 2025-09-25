@@ -216,6 +216,7 @@ contract Crowdfund is ReentrancyGuard {
      */
     function setPlatformShare(uint256 newPlatformShare) external onlyPlatformAdmin {
         require(newPlatformShare <= FEE_DENOMINATOR, "share too high");
+        require(creatorShare + backerShare + newPlatformShare == FEE_DENOMINATOR, "Shares must sum to denominator");
         platformShare = newPlatformShare;
     }
 
