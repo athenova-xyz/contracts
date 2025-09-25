@@ -27,6 +27,9 @@ describe("Primary Course Sales and Backer Revenue Distribution", function () {
             investorNft.address,
             milestoneDescriptions,
             milestonePayouts,
+            platform.account.address,
+            platform.account.address,
+            1000n,
         ]);
 
         // Transfer ownership of NFTs to Crowdfund where required
@@ -44,8 +47,6 @@ describe("Primary Course Sales and Backer Revenue Distribution", function () {
             coursePrice,
             creatorShare,
             backerShare,
-            platformShare,
-            platform.account.address,
         ], { account: creator.account });
 
         // Mint tokens to participants
