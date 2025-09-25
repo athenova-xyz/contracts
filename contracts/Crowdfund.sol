@@ -50,6 +50,7 @@ contract Crowdfund is ReentrancyGuard {
     uint256 public backerShare;  // e.g. 2000 = 20.00%
     uint256 public platformShare; // e.g. 1000 = 10.00%
     address public platformWallet;
+    address public immutable platformAdmin;
 
     // Backer revenue accounting
     // totalBackerPool is the cumulative amount allocated for backers
@@ -87,6 +88,15 @@ contract Crowdfund is ReentrancyGuard {
     event MilestoneVoted(address indexed voter, uint256 indexed milestoneIndex, uint256 voteWeight);
     event MilestoneFundsReleased(uint256 indexed milestoneIndex, uint256 amount);
 
+    // Hardcoded platform admin and wallet
+    address constant HARDCODED_PLATFORM = 0xC257274276a4E539741Ca11b590B9447B26A8051;
+
+    // Modifier for platform admin only
+    modifier onlyPlatformAdmin() {
+        require(msg.sender == platformAdmin, "Only platform admin");
+        _;
+    }
+
     constructor(
         address _acceptedToken,
         uint256 _fundingGoal,
@@ -112,8 +122,12 @@ contract Crowdfund is ReentrancyGuard {
         investorNFT = IInvestorNFT(_investorNftAddress);
         _nextTokenId = 1;
 
-    // Default course-related values (can be set later if zero)
-    _nextCourseTokenId = 1;
+        // Default course-related values (can be set later if zero)
+        _nextCourseTokenId = 1;
+
+    platformAdmin = HARDCODED_PLATFORM;
+    platformWallet = HARDCODED_PLATFORM;
+    platformShare = 1000; // 10% in basis points
 
         // Initialize milestones
         uint256 totalPayouts = 0;
@@ -166,19 +180,16 @@ contract Crowdfund is ReentrancyGuard {
      * @param _creatorShare Basis points for creator
      * @param _backerShare Basis points for backers
      * @param _platformShare Basis points for platform
-     * @param _platformWallet Address to receive platform share
      */
     function setCourseSaleParams(
         address _courseNftAddress,
         uint256 _coursePrice,
         uint256 _creatorShare,
         uint256 _backerShare,
-        uint256 _platformShare,
-        address _platformWallet
+        uint256 _platformShare
     ) external {
         require(msg.sender == creator, "Only creator");
         require(_courseNftAddress != address(0), "course nft zero");
-        require(_platformWallet != address(0), "platform zero");
         require(_creatorShare + _backerShare + _platformShare == FEE_DENOMINATOR, "Shares must sum to denominator");
         // Ensure the Crowdfund contract is the owner of the CourseNFT before enabling sales
         require(ICourseNFT(_courseNftAddress).owner() == address(this), "Crowdfund must own CourseNFT");
@@ -188,7 +199,24 @@ contract Crowdfund is ReentrancyGuard {
         creatorShare = _creatorShare;
         backerShare = _backerShare;
         platformShare = _platformShare;
-        platformWallet = _platformWallet;
+    }
+
+    /**
+     * @notice Update the platform wallet. Only callable by platformAdmin.
+     * @param newPlatformWallet The new platform wallet address
+     */
+    function setPlatformWallet(address newPlatformWallet) external onlyPlatformAdmin {
+        require(newPlatformWallet != address(0), "platform wallet zero");
+        platformWallet = newPlatformWallet;
+    }
+
+    /**
+     * @notice Update the platform share (basis points). Only callable by platformAdmin.
+     * @param newPlatformShare The new platform share in basis points (max 10000)
+     */
+    function setPlatformShare(uint256 newPlatformShare) external onlyPlatformAdmin {
+        require(newPlatformShare <= FEE_DENOMINATOR, "share too high");
+        platformShare = newPlatformShare;
     }
 
     /**

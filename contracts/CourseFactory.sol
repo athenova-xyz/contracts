@@ -7,6 +7,7 @@ import "./Crowdfund.sol";
  * @title CourseFactory
  * @dev Deploys new Crowdfund contracts for course creators.
  */
+
 contract CourseFactory {
     address[] public deployedCourses;
 
@@ -16,15 +17,6 @@ contract CourseFactory {
         uint256 fundingGoal,
         uint256 deadline
     );
-
-    // Option A: if you want the factory to store a default InvestorNFT address,
-    // uncomment the following and set it in the factory constructor:
-    // address public investorNftDefault;
-    //
-    // constructor(address _investorNftDefault) {
-    //     require(_investorNftDefault != address(0), "nft addr zero");
-    //     investorNftDefault = _investorNftDefault;
-    // }
 
     // Changed createCourse to accept investorNftAddress and milestone data
     function createCourse(
