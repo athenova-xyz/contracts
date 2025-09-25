@@ -194,7 +194,7 @@ contract Crowdfund is ReentrancyGuard {
     ) external {
         require(msg.sender == creator, "Only creator");
         require(_courseNftAddress != address(0), "course nft zero");
-        require(_creatorShare + _backerShare + platformShare == FEE_DENOMINATOR, "Shares must sum to denominator");
+        require(_creatorShare + _backerShare + platformShare <= FEE_DENOMINATOR, "Shares exceed denominator");
         // Ensure the Crowdfund contract is the owner of the CourseNFT before enabling sales
         require(ICourseNFT(_courseNftAddress).owner() == address(this), "Crowdfund must own CourseNFT");
 
