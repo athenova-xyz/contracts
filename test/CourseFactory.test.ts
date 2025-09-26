@@ -34,6 +34,9 @@ describe("CourseFactory", function () {
       investorNFT.address,
       milestoneDescriptions,
       milestonePayouts,
+      owner.account.address, // platformAdmin
+      owner.account.address, // platformWallet
+      1000n, // platformShareInit (10%)
     ]);
 
     const publicClient = await hre.viem.getPublicClient();
@@ -75,6 +78,10 @@ describe("CourseFactory", function () {
         investorNFT.address,
         milestoneDescriptions,
         milestonePayouts
+        ,
+        creator.account.address,
+        creator.account.address,
+        1000n,
       ])
     ).to.be.rejectedWith("goal=0");
   });
@@ -95,6 +102,10 @@ describe("CourseFactory", function () {
         investorNFT.address,
         milestoneDescriptions,
         milestonePayouts
+        ,
+        creator.account.address,
+        creator.account.address,
+        1000n,
       ])
     ).to.be.rejectedWith("duration=0");
   });
