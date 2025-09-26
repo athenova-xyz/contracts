@@ -27,6 +27,57 @@ struct Milestone {
  * @dev Token-based crowdfunding contract with finalization logic.
  */
 contract Crowdfund is ReentrancyGuard {
+    // Track ETH royalties received for distribution
+    uint256 public totalEthRoyalties;
+    uint256 public totalBackerEthPool;
+    uint256 public backerEthPaidOutTotal;
+    mapping(address => uint256) public backerEthWithdrawn;
+
+    /**
+     * @notice Receive ETH royalties from marketplaces (EIP-2981)
+     */
+    receive() external payable {
+        if (msg.value == 0) return;
+        totalEthRoyalties += msg.value;
+        // Distribute ETH royalties using same share logic as primary sales
+        uint256 creatorAmt = (msg.value * creatorShare) / FEE_DENOMINATOR;
+        uint256 backerAmt = (msg.value * backerShare) / FEE_DENOMINATOR;
+        uint256 platformAmt = (msg.value * platformShare) / FEE_DENOMINATOR;
+        uint256 dust = msg.value - creatorAmt - backerAmt - platformAmt;
+        if (dust > 0) {
+            backerAmt += dust;
+        }
+        // Effects first: reserve backer allocation before external transfers
+        if (backerAmt > 0) {
+            totalBackerEthPool += backerAmt;
+        }
+        // Interactions: transfer creator and platform shares
+        if (creatorAmt > 0) {
+            payable(creator).transfer(creatorAmt);
+        }
+        if (platformAmt > 0) {
+            payable(platformWallet).transfer(platformAmt);
+        }
+    }
+    /**
+     * @notice Withdraw a backer's accumulated share from the ETH royalty pool.
+     * The entitlement is proportional to their contributions / totalPledged.
+     */
+    function withdrawBackerEthRevenue() external nonReentrant {
+        require(totalBackerEthPool > 0, "No backer ETH funds");
+        uint256 contributed = contributions[msg.sender];
+        require(contributed > 0, "No contribution");
+        require(totalPledged > 0, "No pledges");
+        // Calculate entitled amount based on current pool and contribution weight
+        uint256 entitled = (totalBackerEthPool * contributed) / totalPledged;
+        uint256 already = backerEthWithdrawn[msg.sender];
+        if (entitled <= already) revert("Nothing to withdraw");
+        uint256 payout = entitled - already;
+        backerEthWithdrawn[msg.sender] = already + payout;
+        backerEthPaidOutTotal += payout;
+        // Transfer payout
+        payable(msg.sender).transfer(payout);
+    }
     using SafeERC20 for IERC20;
     // Core campaign parameters
     IERC20 public immutable acceptedToken;
