@@ -118,10 +118,13 @@ contract Crowdfund is ReentrancyGuard {
     require(contributed > 0, "No contribution");
     require(totalPledged > 0, "No pledges");
     uint256 accumulated = (contributed * accEthPerPledged) / 1e18;
-    uint256 payout = accumulated - ethRewardDebt[msg.sender];
-    require(payout > 0, "Nothing to withdraw");
+    uint256 debt = ethRewardDebt[msg.sender];
+    if (accumulated <= debt) revert("Nothing to withdraw");
+    uint256 payout = accumulated - debt;
+    // update reward debt and accounting before transfer
     ethRewardDebt[msg.sender] = accumulated;
     backerEthPaidOutTotal += payout;
+    backerEthWithdrawn[msg.sender] += payout;
     (bool success, ) = msg.sender.call{value: payout}("");
     require(success, "ETH xfer failed");
     emit BackerEthWithdrawal(msg.sender, payout);
@@ -431,9 +434,21 @@ contract Crowdfund is ReentrancyGuard {
         require(actualReceived > 0, "no tokens received");
 
         // Effects: account by actual received amount
+        bool wasZero = (totalPledged == 0);
         contributions[msg.sender] += actualReceived;
         totalPledged += actualReceived;
-        // Update reward debts for cumulative accounting
+        // If this is the first pledge after pending accumulations, roll them into the indices now.
+        if (wasZero) {
+            if (pendingEthForBackersWhenNoPledges > 0) {
+                accEthPerPledged += (pendingEthForBackersWhenNoPledges * 1e18) / totalPledged;
+                pendingEthForBackersWhenNoPledges = 0;
+            }
+            if (pendingTokenForBackersWhenNoPledges > 0) {
+                accTokenPerPledged += (pendingTokenForBackersWhenNoPledges * 1e18) / totalPledged;
+                pendingTokenForBackersWhenNoPledges = 0;
+            }
+        }
+        // Update reward debts for cumulative accounting (after any index changes)
         ethRewardDebt[msg.sender] = (contributions[msg.sender] * accEthPerPledged) / 1e18;
         tokenRewardDebt[msg.sender] = (contributions[msg.sender] * accTokenPerPledged) / 1e18;
 
