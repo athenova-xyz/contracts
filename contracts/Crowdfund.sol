@@ -427,13 +427,15 @@ contract Crowdfund is ReentrancyGuard {
         acceptedToken.safeTransferFrom(msg.sender, address(this), amount);
         uint256 afterBal = acceptedToken.balanceOf(address(this));
         uint256 actualReceived = afterBal - beforeBal;
+        // Prevent zero-value pledges (e.g., fee-on-transfer tokens that result in 0 net transfer)
+        require(actualReceived > 0, "no tokens received");
 
         // Effects: account by actual received amount
-    contributions[msg.sender] += actualReceived;
-    totalPledged += actualReceived;
-    // Update reward debts for cumulative accounting
-    ethRewardDebt[msg.sender] = (contributions[msg.sender] * accEthPerPledged) / 1e18;
-    tokenRewardDebt[msg.sender] = (contributions[msg.sender] * accTokenPerPledged) / 1e18;
+        contributions[msg.sender] += actualReceived;
+        totalPledged += actualReceived;
+        // Update reward debts for cumulative accounting
+        ethRewardDebt[msg.sender] = (contributions[msg.sender] * accEthPerPledged) / 1e18;
+        tokenRewardDebt[msg.sender] = (contributions[msg.sender] * accTokenPerPledged) / 1e18;
 
         // Mint unique Investor NFT to backer
         uint256 tokenId = _nextTokenId;
