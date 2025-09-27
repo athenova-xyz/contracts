@@ -17,3 +17,5 @@ node_modules/
 # Hardhat Ignition deployments (all chains)
 ignition/deployments/**
 !ignition/deployments/.gitkeep
+
+todo.md

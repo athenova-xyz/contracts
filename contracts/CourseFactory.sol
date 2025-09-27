@@ -10,6 +10,12 @@ import "./Crowdfund.sol";
 
 contract CourseFactory {
     address[] public deployedCourses;
+    
+    // Supported tokens on BASE
+    address public constant USDC_BASE = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // USDC on BASE
+    address public constant WETH_BASE = 0x4200000000000000000000000000000000000006; // Wrapped ETH on BASE
+    
+    mapping(address => bool) public supportedTokens;
 
     event CourseCreated(
         address indexed courseAddress,
@@ -17,6 +23,12 @@ contract CourseFactory {
         uint256 fundingGoal,
         uint256 deadline
     );
+    
+    constructor() {
+        // Initialize supported tokens
+        supportedTokens[USDC_BASE] = true;
+        supportedTokens[WETH_BASE] = true;
+    }
 
     // Changed createCourse to accept investorNftAddress and milestone data
     function createCourse(
@@ -32,6 +44,7 @@ contract CourseFactory {
     ) external returns (address) {
         // Input validation
         require(token != address(0), "token addr zero");
+        require(supportedTokens[token], "Token not supported on BASE");
         require(goal > 0, "goal=0");
         require(duration > 0, "duration=0");
         require(investorNftAddress != address(0), "nft addr zero");
