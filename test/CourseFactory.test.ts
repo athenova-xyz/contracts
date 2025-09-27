@@ -6,7 +6,9 @@ import { getAddress } from "viem";
 describe("CourseFactory", function () {
   async function deployFactoryFixture() {
     const [owner, creator] = await hre.viem.getWalletClients();
-    const courseFactory = await hre.viem.deployContract("CourseFactory");
+    const courseFactory = await hre.viem.deployContract("CourseFactory", [
+      owner.account.address, // platformAdmin
+    ]);
 
     // Deploy unsupported token for testing failure case
     const unsupportedToken = await hre.viem.deployContract("ERC20Mock", [
@@ -20,11 +22,9 @@ describe("CourseFactory", function () {
       owner.account.address,
     ]);
 
-    // BASE token addresses (constants from the contract)
-    const USDC_BASE =
-      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`;
-    const WETH_BASE =
-      "0x4200000000000000000000000000000000000006" as `0x${string}`;
+    // BASE token addresses (read from contract constants)
+    const USDC_BASE = (await courseFactory.read.USDC_BASE()) as `0x${string}`;
+    const WETH_BASE = (await courseFactory.read.WETH_BASE()) as `0x${string}`;
 
     return {
       courseFactory,
