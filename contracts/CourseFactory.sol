@@ -15,7 +15,8 @@ contract CourseFactory {
     address public constant USDC_BASE = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // USDC on BASE
     address public constant WETH_BASE = 0x4200000000000000000000000000000000000006; // Wrapped ETH on BASE
     
-    mapping(address => bool) public supportedTokens;
+    // Platform admin for governance functions
+    address public immutable platformAdmin;
 
     event CourseCreated(
         address indexed courseAddress,
@@ -24,10 +25,43 @@ contract CourseFactory {
         uint256 deadline
     );
     
-    constructor() {
-        // Initialize supported tokens
-        supportedTokens[USDC_BASE] = true;
-        supportedTokens[WETH_BASE] = true;
+    event SupportedTokenUpdated(address indexed token, bool supported);
+    
+    constructor(address _platformAdmin) {
+        require(_platformAdmin != address(0), "platform admin zero");
+        platformAdmin = _platformAdmin;
+    }
+
+    modifier onlyPlatformAdmin() {
+        require(msg.sender == platformAdmin, "Only platform admin");
+        _;
+    }
+
+    // For future extensibility: add/remove supported tokens
+    // Note: This example shows how extensibility could be added later
+    // Currently, only USDC_BASE and WETH_BASE are supported via constants
+    mapping(address => bool) private _additionalSupportedTokens;
+
+    /**
+     * @notice Check if a token is supported
+     * @param token The token address to check
+     * @return bool True if the token is supported
+     */
+    function isTokenSupported(address token) public view returns (bool) {
+        return token == USDC_BASE || token == WETH_BASE  || _additionalSupportedTokens[token];
+    }
+
+    /**
+     * @notice Add or remove support for additional tokens (governance function)
+     * @param token The token address
+     * @param supported Whether the token should be supported
+     */
+    function setSupportedToken(address token, bool supported) external onlyPlatformAdmin {
+        require(token != address(0), "token addr zero");
+        require(token != USDC_BASE && token != WETH_BASE, "Cannot modify base tokens");
+        
+        _additionalSupportedTokens[token] = supported;
+        emit SupportedTokenUpdated(token, supported);
     }
 
     // Changed createCourse to accept investorNftAddress and milestone data
@@ -38,13 +72,13 @@ contract CourseFactory {
         address investorNftAddress,
         string[] calldata milestoneDescriptions,
         uint256[] calldata milestonePayouts,
-        address platformAdmin,
+        address _platformAdmin,
         address platformWallet,
         uint256 platformShareInit
     ) external returns (address) {
         // Input validation
         require(token != address(0), "token addr zero");
-        require(supportedTokens[token], "Token not supported on BASE");
+        require(isTokenSupported(token), "Token not supported on BASE");
         require(goal > 0, "goal=0");
         require(duration > 0, "duration=0");
         require(investorNftAddress != address(0), "nft addr zero");
@@ -58,7 +92,7 @@ contract CourseFactory {
         }
         require(totalPayout <= goal, "payouts exceed goal");
         
-        require(platformAdmin != address(0), "platform admin zero");
+        require(_platformAdmin != address(0), "platform admin zero");
         require(platformWallet != address(0), "platform wallet zero");
         require(platformShareInit <= 10000, "platform share too high");
 
@@ -70,7 +104,7 @@ contract CourseFactory {
             investorNftAddress,
             milestoneDescriptions,
             milestonePayouts,
-            platformAdmin,
+            _platformAdmin,
             platformWallet,
             platformShareInit
         );

@@ -6,7 +6,9 @@ import { getAddress } from "viem";
 describe("CourseFactory", function () {
   async function deployFactoryFixture() {
     const [owner, creator] = await hre.viem.getWalletClients();
-    const courseFactory = await hre.viem.deployContract("CourseFactory");
+    const courseFactory = await hre.viem.deployContract("CourseFactory", [
+      owner.account.address, // platformAdmin
+    ]);
 
     // Deploy unsupported token for testing failure case
     const unsupportedToken = await hre.viem.deployContract("ERC20Mock", [
@@ -20,11 +22,9 @@ describe("CourseFactory", function () {
       owner.account.address,
     ]);
 
-    // BASE token addresses (constants from the contract)
-    const USDC_BASE =
-      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`;
-    const WETH_BASE =
-      "0x4200000000000000000000000000000000000006" as `0x${string}`;
+    // BASE token addresses (read from contract constants)
+    const USDC_BASE = (await courseFactory.read.USDC_BASE()) as `0x${string}`;
+    const WETH_BASE = (await courseFactory.read.WETH_BASE()) as `0x${string}`;
 
     return {
       courseFactory,
@@ -60,10 +60,18 @@ describe("CourseFactory", function () {
     ]);
 
     const publicClient = await hre.viem.getPublicClient();
-    await publicClient.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: txHash,
+    });
 
     // Fetch emitted events via viem-generated getter
-    const events = await courseFactory.getEvents.CourseCreated();
+    const events = await courseFactory.getEvents.CourseCreated(
+      {},
+      {
+        fromBlock: receipt.blockNumber,
+        toBlock: receipt.blockNumber,
+      }
+    );
     expect(events.length).to.equal(1);
     const evtArgs = events[0].args;
     expect(evtArgs.creator).to.not.be.undefined;
@@ -184,6 +192,185 @@ describe("CourseFactory", function () {
 
     // Verify the course was created successfully by checking deployed courses array
     const deployedCourses = await courseFactory.read.deployedCourses([0n]); // First course in this test instance
+    expect(deployedCourses).to.not.equal(
+      "0x0000000000000000000000000000000000000000"
+    );
+  });
+
+  it("Should allow platform admin to set supported token", async function () {
+    const { courseFactory, owner, unsupportedToken } = await loadFixture(
+      deployFactoryFixture
+    );
+
+    // Initially, the unsupported token should not be supported
+    expect(
+      await courseFactory.read.isTokenSupported([unsupportedToken.address])
+    ).to.be.false;
+
+    // Platform admin should be able to add support for the token
+    const txHash = await courseFactory.write.setSupportedToken([
+      unsupportedToken.address,
+      true,
+    ]);
+
+    const publicClient = await hre.viem.getPublicClient();
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: txHash,
+    });
+
+    // Check that the token is now supported
+    expect(
+      await courseFactory.read.isTokenSupported([unsupportedToken.address])
+    ).to.be.true;
+
+    // Check that the event was emitted
+    const events = await courseFactory.getEvents.SupportedTokenUpdated(
+      {},
+      {
+        fromBlock: receipt.blockNumber,
+        toBlock: receipt.blockNumber,
+      }
+    );
+    expect(events.length).to.equal(1);
+    expect(getAddress(events[0].args.token!)).to.equal(
+      getAddress(unsupportedToken.address)
+    );
+    expect(events[0].args.supported).to.be.true;
+  });
+
+  it("Should allow platform admin to remove supported token", async function () {
+    const { courseFactory, owner, unsupportedToken } = await loadFixture(
+      deployFactoryFixture
+    );
+
+    // First, add support for the token
+    await courseFactory.write.setSupportedToken([
+      unsupportedToken.address,
+      true,
+    ]);
+    expect(
+      await courseFactory.read.isTokenSupported([unsupportedToken.address])
+    ).to.be.true;
+
+    // Then remove support
+    const txHash = await courseFactory.write.setSupportedToken([
+      unsupportedToken.address,
+      false,
+    ]);
+
+    const publicClient = await hre.viem.getPublicClient();
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: txHash,
+    });
+
+    // Check that the token is no longer supported
+    expect(
+      await courseFactory.read.isTokenSupported([unsupportedToken.address])
+    ).to.be.false;
+
+    // Check that the event was emitted
+    const events = await courseFactory.getEvents.SupportedTokenUpdated(
+      {},
+      {
+        fromBlock: receipt.blockNumber,
+        toBlock: receipt.blockNumber,
+      }
+    );
+    expect(events.length).to.equal(1);
+    expect(getAddress(events[0].args.token!)).to.equal(
+      getAddress(unsupportedToken.address)
+    );
+    expect(events[0].args.supported).to.be.false;
+  });
+
+  it("Should revert if non-admin tries to set supported token", async function () {
+    const { courseFactory, creator, unsupportedToken } = await loadFixture(
+      deployFactoryFixture
+    );
+
+    // Non-admin (creator) should not be able to set supported tokens
+    await expect(
+      courseFactory.write.setSupportedToken([unsupportedToken.address, true], {
+        account: creator.account,
+      })
+    ).to.be.rejectedWith("Only platform admin");
+  });
+
+  it("Should revert when trying to modify base tokens", async function () {
+    const { courseFactory, USDC_BASE, WETH_BASE } = await loadFixture(
+      deployFactoryFixture
+    );
+
+    // Should not be able to modify USDC_BASE
+    await expect(
+      courseFactory.write.setSupportedToken([USDC_BASE, false])
+    ).to.be.rejectedWith("Cannot modify base tokens");
+
+    // Should not be able to modify WETH_BASE
+    await expect(
+      courseFactory.write.setSupportedToken([WETH_BASE, false])
+    ).to.be.rejectedWith("Cannot modify base tokens");
+  });
+
+  it("Should revert when trying to set zero address as supported token", async function () {
+    const { courseFactory } = await loadFixture(deployFactoryFixture);
+
+    await expect(
+      courseFactory.write.setSupportedToken([
+        "0x0000000000000000000000000000000000000000",
+        true,
+      ])
+    ).to.be.rejectedWith("token addr zero");
+  });
+
+  it("Should allow course creation with newly supported token", async function () {
+    const { courseFactory, owner, unsupportedToken, investorNFT } =
+      await loadFixture(deployFactoryFixture);
+
+    // Initially, creating a course with unsupported token should fail
+    const fundingGoal = 1000n;
+    const duration = 7n * 24n * 60n * 60n; // 7 days in seconds
+    const milestoneDescriptions = ["Complete project"];
+    const milestonePayouts = [fundingGoal];
+
+    await expect(
+      courseFactory.write.createCourse([
+        unsupportedToken.address,
+        fundingGoal,
+        duration,
+        investorNFT.address,
+        milestoneDescriptions,
+        milestonePayouts,
+        owner.account.address, // platformAdmin
+        owner.account.address, // platformWallet
+        1000n, // platformShare (10%)
+      ])
+    ).to.be.rejectedWith("Token not supported on BASE");
+
+    // Add support for the token
+    await courseFactory.write.setSupportedToken([
+      unsupportedToken.address,
+      true,
+    ]);
+
+    // Now course creation should succeed
+    const txHash = await courseFactory.write.createCourse([
+      unsupportedToken.address,
+      fundingGoal,
+      duration,
+      investorNFT.address,
+      milestoneDescriptions,
+      milestonePayouts,
+      owner.account.address, // platformAdmin
+      owner.account.address, // platformWallet
+      1000n, // platformShare (10%)
+    ]);
+
+    const publicClient = await hre.viem.getPublicClient();
+    await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+    // Verify the course was created successfully
+    const deployedCourses = await courseFactory.read.deployedCourses([0n]);
     expect(deployedCourses).to.not.equal(
       "0x0000000000000000000000000000000000000000"
     );
