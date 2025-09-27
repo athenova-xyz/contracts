@@ -33,6 +33,9 @@ describe("Crowdfund with InvestorNFT integration", function () {
       investorNft.address,
       milestoneDescriptions,
       milestonePayouts,
+      deployer.account.address,
+      deployer.account.address,
+      1000n,
     ]);
 
     // Transfer ownership of InvestorNFT to Crowdfund
@@ -134,6 +137,9 @@ async function deployCrowdfundFixture() {
     investorNft.address,
     milestoneDescriptions,
     milestonePayouts,
+    creator.account.address,
+    creator.account.address,
+    1000n,
   ]);
 
   // Transfer ownership of InvestorNFT to Crowdfund
