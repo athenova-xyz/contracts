@@ -21,8 +21,10 @@ describe("CourseFactory", function () {
     ]);
 
     // BASE token addresses (constants from the contract)
-    const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-    const WETH_BASE = "0x4200000000000000000000000000000000000006";
+    const USDC_BASE =
+      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as `0x${string}`;
+    const WETH_BASE =
+      "0x4200000000000000000000000000000000000006" as `0x${string}`;
 
     return {
       courseFactory,
@@ -45,7 +47,7 @@ describe("CourseFactory", function () {
     const milestoneDescriptions = ["Complete project"];
     const milestonePayouts = [fundingGoal];
 
-    const txHash = await (courseFactory as any).write.createCourse([
+    const txHash = await courseFactory.write.createCourse([
       USDC_BASE, // Use supported token
       fundingGoal,
       duration,
@@ -63,8 +65,10 @@ describe("CourseFactory", function () {
     // Fetch emitted events via viem-generated getter
     const events = await courseFactory.getEvents.CourseCreated();
     expect(events.length).to.equal(1);
-    const evtArgs = events[0].args as any; // { courseAddress, creator, fundingGoal, deadline }
-    expect(getAddress(evtArgs.creator)).to.equal(
+    const evtArgs = events[0].args;
+    expect(evtArgs.creator).to.not.be.undefined;
+    expect(evtArgs.courseAddress).to.not.be.undefined;
+    expect(getAddress(evtArgs.creator!)).to.equal(
       getAddress(owner.account.address)
     );
     expect(evtArgs.fundingGoal).to.equal(fundingGoal);
@@ -72,7 +76,9 @@ describe("CourseFactory", function () {
     // Verify the deployed course is stored (index 0)
     // For a public dynamic array Solidity creates a getter: deployedCourses(uint256) -> address
     const firstCourse = await courseFactory.read.deployedCourses([0n]);
-    expect(getAddress(firstCourse)).to.equal(getAddress(evtArgs.courseAddress));
+    expect(getAddress(firstCourse)).to.equal(
+      getAddress(evtArgs.courseAddress!)
+    );
     expect(firstCourse).to.not.equal(
       "0x0000000000000000000000000000000000000000"
     );
@@ -88,7 +94,7 @@ describe("CourseFactory", function () {
     const milestonePayouts = [100n]; // Non-zero payout
 
     await expect(
-      (courseFactory as any).write.createCourse([
+      courseFactory.write.createCourse([
         WETH_BASE, // Use supported token
         fundingGoal,
         duration,
@@ -112,7 +118,7 @@ describe("CourseFactory", function () {
 
     // This should fail because duration=0 is not allowed
     await expect(
-      (courseFactory as any).write.createCourse([
+      courseFactory.write.createCourse([
         USDC_BASE, // Use supported token
         fundingGoal,
         zeroDuration,
@@ -137,7 +143,7 @@ describe("CourseFactory", function () {
 
     // This should fail because the token is not in the supported tokens list
     await expect(
-      (courseFactory as any).write.createCourse([
+      courseFactory.write.createCourse([
         unsupportedToken.address, // Use unsupported token
         fundingGoal,
         duration,
@@ -161,7 +167,7 @@ describe("CourseFactory", function () {
     const milestoneDescriptions = ["Complete project"];
     const milestonePayouts = [fundingGoal];
 
-    const txHash = await (courseFactory as any).write.createCourse([
+    const txHash = await courseFactory.write.createCourse([
       WETH_BASE, // Use WETH (supported token)
       fundingGoal,
       duration,
@@ -176,8 +182,10 @@ describe("CourseFactory", function () {
     const publicClient = await hre.viem.getPublicClient();
     await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-    // Verify the course was created successfully
-    const events = await courseFactory.getEvents.CourseCreated();
-    expect(events.length).to.equal(2); // This is the second test that creates a course
+    // Verify the course was created successfully by checking deployed courses array
+    const deployedCourses = await courseFactory.read.deployedCourses([0n]); // First course in this test instance
+    expect(deployedCourses).to.not.equal(
+      "0x0000000000000000000000000000000000000000"
+    );
   });
 });
