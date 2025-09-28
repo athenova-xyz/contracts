@@ -2,6 +2,7 @@
 pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
@@ -10,13 +11,17 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  * The right to mint these tokens is restricted to the contract owner,
  * which will be the main course contract responsible for sales.
  */
-contract CourseNFT is ERC721, Ownable {
+contract CourseNFT is ERC721, Ownable, ERC2981 {
     constructor(
         string memory name,
         string memory symbol,
-        address initialOwner
+        address initialOwner,
+        address crowdfundAddress
     ) ERC721(name, symbol) Ownable(initialOwner) {
         require(initialOwner != address(0), "Initial owner cannot be zero address");
+        require(crowdfundAddress != address(0), "Crowdfund address cannot be zero");
+        // Set EIP-2981 default royalty: receiver = crowdfund contract, feeNumerator = 500 (5%)
+        _setDefaultRoyalty(crowdfundAddress, 500);
     }
 
     /**
@@ -27,5 +32,10 @@ contract CourseNFT is ERC721, Ownable {
      */
     function safeMint(address to, uint256 tokenId) public onlyOwner {
         _safeMint(to, tokenId);
+    }
+
+    /// @dev Required override for Solidity multiple inheritance
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC2981) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }

@@ -27,6 +27,108 @@ struct Milestone {
  * @dev Token-based crowdfunding contract with finalization logic.
  */
 contract Crowdfund is ReentrancyGuard {
+    // Cumulative index accounting for ETH royalties
+    uint256 public accEthPerPledged; // 1e18 precision
+    mapping(address => uint256) public ethRewardDebt;
+    uint256 public pendingEthForBackersWhenNoPledges;
+    event BackerEthWithdrawal(address indexed backer, uint256 amount);
+
+    // Cumulative index accounting for ERC20 backer pool
+    uint256 public accTokenPerPledged; // 1e18 precision
+    mapping(address => uint256) public tokenRewardDebt;
+    uint256 public pendingTokenForBackersWhenNoPledges;
+    event BackerTokenWithdrawal(address indexed backer, uint256 amount);
+    event EthRoyaltyReceived(uint256 amount, uint256 creatorAmt, uint256 backerAmt, uint256 platformAmt);
+    /**
+     * @notice Fallback to accept ETH royalties sent with non-empty data
+     */
+    fallback() external payable nonReentrant {
+        if (msg.value == 0) return;
+        totalEthRoyalties += msg.value;
+        uint256 creatorAmt = (msg.value * creatorShare) / FEE_DENOMINATOR;
+        uint256 backerAmt = (msg.value * backerShare) / FEE_DENOMINATOR;
+        uint256 platformAmt = (msg.value * platformShare) / FEE_DENOMINATOR;
+        uint256 dust = msg.value - creatorAmt - backerAmt - platformAmt;
+        if (dust > 0) {
+            backerAmt += dust;
+        }
+        if (backerAmt > 0) {
+            if (totalPledged == 0) {
+                pendingEthForBackersWhenNoPledges += backerAmt;
+            } else {
+                accEthPerPledged += ((backerAmt + pendingEthForBackersWhenNoPledges) * 1e18) / totalPledged;
+                pendingEthForBackersWhenNoPledges = 0;
+            }
+            totalBackerEthPool += backerAmt;
+        }
+        if (creatorAmt > 0) {
+            (bool s1, ) = payable(creator).call{value: creatorAmt}("");
+            require(s1, "ETH xfer to creator failed");
+        }
+        if (platformAmt > 0) {
+            (bool s2, ) = payable(platformWallet).call{value: platformAmt}("");
+            require(s2, "ETH xfer to platform failed");
+        }
+        emit EthRoyaltyReceived(msg.value, creatorAmt, backerAmt, platformAmt);
+    }
+    // Track ETH royalties received for distribution
+    uint256 public totalEthRoyalties;
+    uint256 public totalBackerEthPool;
+    uint256 public backerEthPaidOutTotal;
+    mapping(address => uint256) public backerEthWithdrawn;
+
+    /**
+     * @notice Receive ETH royalties from marketplaces (EIP-2981)
+     */
+    receive() external payable nonReentrant {
+        if (msg.value == 0) return;
+        totalEthRoyalties += msg.value;
+        uint256 creatorAmt = (msg.value * creatorShare) / FEE_DENOMINATOR;
+        uint256 backerAmt = (msg.value * backerShare) / FEE_DENOMINATOR;
+        uint256 platformAmt = (msg.value * platformShare) / FEE_DENOMINATOR;
+        uint256 dust = msg.value - creatorAmt - backerAmt - platformAmt;
+        if (dust > 0) {
+            backerAmt += dust;
+        }
+        if (backerAmt > 0) {
+            if (totalPledged == 0) {
+                pendingEthForBackersWhenNoPledges += backerAmt;
+            } else {
+                accEthPerPledged += ((backerAmt + pendingEthForBackersWhenNoPledges) * 1e18) / totalPledged;
+                pendingEthForBackersWhenNoPledges = 0;
+            }
+            totalBackerEthPool += backerAmt;
+        }
+        if (creatorAmt > 0) {
+            (bool s1, ) = payable(creator).call{value: creatorAmt}("");
+            require(s1, "ETH xfer to creator failed");
+        }
+        if (platformAmt > 0) {
+            (bool s2, ) = payable(platformWallet).call{value: platformAmt}("");
+            require(s2, "ETH xfer to platform failed");
+        }
+        emit EthRoyaltyReceived(msg.value, creatorAmt, backerAmt, platformAmt);
+    }
+    /**
+     * @notice Withdraw a backer's accumulated share from the ETH royalty pool.
+     * The entitlement is proportional to their contributions / totalPledged.
+     */
+    function withdrawBackerEthRevenue() external nonReentrant {
+    uint256 contributed = contributions[msg.sender];
+    require(contributed > 0, "No contribution");
+    require(totalPledged > 0, "No pledges");
+    uint256 accumulated = (contributed * accEthPerPledged) / 1e18;
+    uint256 debt = ethRewardDebt[msg.sender];
+    if (accumulated <= debt) revert("Nothing to withdraw");
+    uint256 payout = accumulated - debt;
+    // update reward debt and accounting before transfer
+    ethRewardDebt[msg.sender] = accumulated;
+    backerEthPaidOutTotal += payout;
+    backerEthWithdrawn[msg.sender] += payout;
+    (bool success, ) = msg.sender.call{value: payout}("");
+    require(success, "ETH xfer failed");
+    emit BackerEthWithdrawal(msg.sender, payout);
+    }
     using SafeERC20 for IERC20;
     // Core campaign parameters
     IERC20 public immutable acceptedToken;
@@ -265,12 +367,16 @@ contract Crowdfund is ReentrancyGuard {
             backerAmt += dust;
         }
 
-        // Effects first: reserve backer allocation before external transfers
         if (backerAmt > 0) {
+            if (totalPledged == 0) {
+                pendingTokenForBackersWhenNoPledges += backerAmt;
+            } else {
+                accTokenPerPledged += ((backerAmt + pendingTokenForBackersWhenNoPledges) * 1e18) / totalPledged;
+                pendingTokenForBackersWhenNoPledges = 0;
+            }
             totalBackerPool += backerAmt;
         }
 
-        // Interactions: transfer creator and platform shares
         if (creatorAmt > 0) {
             acceptedToken.safeTransfer(creator, creatorAmt);
         }
@@ -285,23 +391,16 @@ contract Crowdfund is ReentrancyGuard {
      */
     function withdrawBackerRevenue() external nonReentrant {
     require(totalBackerPool > 0, "No backer funds");
-        uint256 contributed = contributions[msg.sender];
-        require(contributed > 0, "No contribution");
+    uint256 contributed = contributions[msg.sender];
+    require(contributed > 0, "No contribution");
     require(totalPledged > 0, "No pledges");
-
-        // Calculate entitled amount based on current pool and contribution weight
-        // entitlement = totalBackerPool * contributed / totalPledged - alreadyWithdrawn
-        uint256 entitled = (totalBackerPool * contributed) / totalPledged;
-        uint256 already = backerWithdrawn[msg.sender];
-        if (entitled <= already) revert("Nothing to withdraw");
-
-        uint256 payout = entitled - already;
-        backerWithdrawn[msg.sender] = already + payout;
-        // update aggregate paid out to keep liability accounting accurate
-        backerPaidOutTotal += payout;
-
-        // Transfer payout
-        acceptedToken.safeTransfer(msg.sender, payout);
+    uint256 accumulated = (contributed * accTokenPerPledged) / 1e18;
+    uint256 payout = accumulated - tokenRewardDebt[msg.sender];
+    require(payout > 0, "Nothing to withdraw");
+    tokenRewardDebt[msg.sender] = accumulated;
+    backerPaidOutTotal += payout;
+    acceptedToken.safeTransfer(msg.sender, payout);
+    emit BackerTokenWithdrawal(msg.sender, payout);
     }
 
     // Helper returns outstanding liability reserved for backers
@@ -331,10 +430,27 @@ contract Crowdfund is ReentrancyGuard {
         acceptedToken.safeTransferFrom(msg.sender, address(this), amount);
         uint256 afterBal = acceptedToken.balanceOf(address(this));
         uint256 actualReceived = afterBal - beforeBal;
+        // Prevent zero-value pledges (e.g., fee-on-transfer tokens that result in 0 net transfer)
+        require(actualReceived > 0, "no tokens received");
 
         // Effects: account by actual received amount
+        bool wasZero = (totalPledged == 0);
         contributions[msg.sender] += actualReceived;
         totalPledged += actualReceived;
+        // If this is the first pledge after pending accumulations, roll them into the indices now.
+        if (wasZero) {
+            if (pendingEthForBackersWhenNoPledges > 0) {
+                accEthPerPledged += (pendingEthForBackersWhenNoPledges * 1e18) / totalPledged;
+                pendingEthForBackersWhenNoPledges = 0;
+            }
+            if (pendingTokenForBackersWhenNoPledges > 0) {
+                accTokenPerPledged += (pendingTokenForBackersWhenNoPledges * 1e18) / totalPledged;
+                pendingTokenForBackersWhenNoPledges = 0;
+            }
+        }
+        // Update reward debts for cumulative accounting (after any index changes)
+        ethRewardDebt[msg.sender] = (contributions[msg.sender] * accEthPerPledged) / 1e18;
+        tokenRewardDebt[msg.sender] = (contributions[msg.sender] * accTokenPerPledged) / 1e18;
 
         // Mint unique Investor NFT to backer
         uint256 tokenId = _nextTokenId;
