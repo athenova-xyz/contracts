@@ -11,8 +11,9 @@ describe("Primary Course Sales and Backer Revenue Distribution", function () {
         const token = await hre.viem.deployContract("ERC20Mock", ["Mock Token", "MOCK"]);
 
         // Deploy CourseNFT and InvestorNFT
-        const courseNFT = await hre.viem.deployContract("CourseNFT", ["Athenova Course Access", "ACA", creator.account.address]);
-        const investorNft = await hre.viem.deployContract("InvestorNFT", ["Investor Share", "INV", creator.account.address]);
+    // Use creator as the crowdfundAddress for test purposes
+    const courseNFT = await hre.viem.deployContract("CourseNFT", ["Athenova Course Access", "ACA", creator.account.address, creator.account.address]);
+    const investorNft = await hre.viem.deployContract("InvestorNFT", ["Investor Share", "INV", creator.account.address, creator.account.address]);
 
         // Deploy Crowdfund
         const fundingGoal = 1000000000000000000000n; // 1000 tokens

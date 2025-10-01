@@ -16,9 +16,11 @@ describe("CourseFactory", function () {
       "MOCK",
     ]);
 
+    // Use owner as the crowdfundAddress for test purposes
     const investorNFT = await hre.viem.deployContract("InvestorNFT", [
       "Investor NFT",
       "INFT",
+      owner.account.address,
       owner.account.address,
     ]);
 

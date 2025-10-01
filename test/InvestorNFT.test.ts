@@ -7,9 +7,11 @@ describe("InvestorNFT", function () {
   async function deployInvestorNFTFixture() {
     const [owner, otherAccount] = await hre.viem.getWalletClients();
 
+    // Use owner as the crowdfundAddress for test purposes
     const investorNFT = await hre.viem.deployContract("InvestorNFT", [
       "Athenova Investor Share",
       "AIS",
+      owner.account.address,
       owner.account.address,
     ]);
 
