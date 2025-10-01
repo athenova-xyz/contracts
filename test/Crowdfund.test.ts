@@ -14,9 +14,11 @@ describe("Crowdfund with InvestorNFT integration", function () {
     ]);
 
     // Deploy InvestorNFT
+    // Use deployer as the crowdfundAddress for test purposes
     const investorNft = await hre.viem.deployContract("InvestorNFT", [
       "Investor Share",
       "INV",
+      deployer.account.address,
       deployer.account.address,
     ]);
 
@@ -118,9 +120,11 @@ async function deployCrowdfundFixture() {
   ]);
 
   // Deploy InvestorNFT
+  // Use creator as the crowdfundAddress for test purposes
   const investorNft = await hre.viem.deployContract("InvestorNFT", [
     "Investor Share",
     "INV",
+    creator.account.address,
     creator.account.address,
   ]);
 

@@ -7,9 +7,11 @@ describe("CourseNFT", function () {
   async function deployCourseNFTFixture() {
     const [owner, otherAccount] = await hre.viem.getWalletClients();
 
+    // Use owner as the crowdfundAddress for test purposes
     const courseNFT = await hre.viem.deployContract("CourseNFT", [
       "Athenova Course Access",
       "ACA",
+      owner.account.address,
       owner.account.address,
     ]);
 
