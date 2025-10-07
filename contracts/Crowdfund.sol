@@ -39,28 +39,7 @@ contract Crowdfund is ReentrancyGuard {
     uint256 public pendingTokenForBackersWhenNoPledges;
     event BackerTokenWithdrawal(address indexed backer, uint256 amount);
     event EthRoyaltyReceived(uint256 amount, uint256 creatorAmt, uint256 backerAmt, uint256 platformAmt);
-    /**
-     * @notice Fallback to accept ETH royalties sent with non-empty data
-     */
-    fallback() external payable nonReentrant {
-        if (msg.value == 0) return;
-        totalEthRoyalties += msg.value;
-        uint256 creatorAmt = (msg.value * creatorShare) / FEE_DENOMINATOR;
-        uint256 backerAmt = (msg.value * backerShare) / FEE_DENOMINATOR;
-        uint256 platformAmt = (msg.value * platformShare) / FEE_DENOMINATOR;
-        uint256 dust = msg.value - creatorAmt - backerAmt - platformAmt;
-        if (dust > 0) {
-            backerAmt += dust;
-        }
-        if (backerAmt > 0) {
-            if (totalPledged == 0) {
-                pendingEthForBackersWhenNoPledges += backerAmt;
-            } else {
-                accEthPerPledged += ((backerAmt + pendingEthForBackersWhenNoPledges) * 1e18) / totalPledged;
-                pendingEthForBackersWhenNoPledges = 0;
-            }
-            totalBackerEthPool += backerAmt;
-        }
+
         if (creatorAmt > 0) {
             (bool s1, ) = payable(creator).call{value: creatorAmt}("");
             require(s1, "ETH xfer to creator failed");
@@ -94,7 +73,22 @@ contract Crowdfund is ReentrancyGuard {
             if (totalPledged == 0) {
                 pendingEthForBackersWhenNoPledges += backerAmt;
             } else {
-                accEthPerPledged += ((backerAmt + pendingEthForBackersWhenNoPledges) * 1e18) / totalPledged;
+                // Add the current backerAmt to pendingEthForBackersWhenNoPledges
+                pendingEthForBackersWhenNoPledges += backerAmt;
+
+                // Calculate the amount to be added to accEthPerPledged, including the previous remainder
+                uint256 amountToProcessEth = pendingEthForBackersWhenNoPledges + ethRemainderForAccPerPledged;
+
+                // Calculate the delta for accEthPerPledged
+                uint256 deltaAccEthPerPledged = (amountToProcessEth * 1e18) / totalPledged;
+
+                // Calculate the new remainder
+                ethRemainderForAccPerPledged = (amountToProcessEth * 1e18) % totalPledged;
+
+                // Update accEthPerPledged
+                accEthPerPledged += deltaAccEthPerPledged;
+
+                // Reset pendingEthForBackersWhenNoPledges as it has been processed
                 pendingEthForBackersWhenNoPledges = 0;
             }
             totalBackerEthPool += backerAmt;
@@ -161,9 +155,10 @@ contract Crowdfund is ReentrancyGuard {
     mapping(address => uint256) public backerWithdrawn;
     // aggregate sum of all backer withdrawals to protect pool reserves
     uint256 public backerPaidOutTotal;
+    uint256 public ethRemainderForAccPerPledged; // Remainder for ETH accPerPledged
+    uint256 public tokenRemainderForAccPerPledged; // Remainder for ERC20 accPerPledged
 
-    // Book-keeping
-    uint256 public totalPledged;
+    // Mapping from backer address to their total contribution amount
     mapping(address => uint256) public contributions;
     bool public fundsClaimed;
 
@@ -371,7 +366,22 @@ contract Crowdfund is ReentrancyGuard {
             if (totalPledged == 0) {
                 pendingTokenForBackersWhenNoPledges += backerAmt;
             } else {
-                accTokenPerPledged += ((backerAmt + pendingTokenForBackersWhenNoPledges) * 1e18) / totalPledged;
+                // Add the current backerAmt to pendingTokenForBackersWhenNoPledges
+                pendingTokenForBackersWhenNoPledges += backerAmt;
+
+                // Calculate the amount to be added to accTokenPerPledged, including the previous remainder
+                uint256 amountToProcessToken = pendingTokenForBackersWhenNoPledges + tokenRemainderForAccPerPledged;
+
+                // Calculate the delta for accTokenPerPledged
+                uint256 deltaAccTokenPerPledged = (amountToProcessToken * 1e18) / totalPledged;
+
+                // Calculate the new remainder
+                tokenRemainderForAccPerPledged = (amountToProcessToken * 1e18) % totalPledged;
+
+                // Update accTokenPerPledged
+                accTokenPerPledged += deltaAccTokenPerPledged;
+
+                // Reset pendingTokenForBackersWhenNoPledges as it has been processed
                 pendingTokenForBackersWhenNoPledges = 0;
             }
             totalBackerPool += backerAmt;

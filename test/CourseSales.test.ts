@@ -152,6 +152,10 @@ describe("Primary Course Sales and Backer Revenue Distribution", function () {
         const after2 = await token.read.balanceOf([backer2.account.address]);
         expect(after2 - before2).to.equal(entitled2);
 
+        // Add assertion to check total distributed amount
+        const totalDistributed = (after1 - before1) + (after2 - before2);
+        expect(totalDistributed).to.equal(expectedPool);
+
         // After withdrawal their claimable should be zero
         const already1 = await crowdfund.read.backerWithdrawn([backer1.account.address]);
         const already2 = await crowdfund.read.backerWithdrawn([backer2.account.address]);
