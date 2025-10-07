@@ -17,10 +17,10 @@ contract CourseNFT is ERC721, Ownable, ERC2981 {
         string memory symbol,
         address initialOwner,
         address crowdfundAddress
-    ) ERC721(name, symbol) {
+    ) ERC721(name, symbol) Ownable(initialOwner) {
         require(initialOwner != address(0), "Initial owner cannot be zero address");
         require(crowdfundAddress != address(0), "Crowdfund address cannot be zero");
-        _transferOwnership(initialOwner);
+
         // Set EIP-2981 default royalty: receiver = crowdfund contract, feeNumerator = 500 (5%)
         _setDefaultRoyalty(crowdfundAddress, 500);
     }
