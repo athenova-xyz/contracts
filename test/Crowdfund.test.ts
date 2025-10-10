@@ -1,33 +1,33 @@
-import { loadFixture, time } from "@nomicfoundation/hardhat-network-helpers";
-import { expect } from "chai";
-import hre from "hardhat";
-import { getAddress } from "viem";
+import { loadFixture, time } from '@nomicfoundation/hardhat-network-helpers'
+import { expect } from 'chai'
+import hre from 'hardhat'
+import { getAddress } from 'viem'
 
-describe("Crowdfund with InvestorNFT integration", function () {
+describe('Crowdfund with InvestorNFT integration', function () {
   async function deployCrowdfundWithNFTFixture() {
-    const [deployer, backer, attacker] = await hre.viem.getWalletClients();
+    const [deployer, backer, attacker] = await hre.viem.getWalletClients()
 
     // Deploy ERC20Mock
-    const token = await hre.viem.deployContract("ERC20Mock", [
-      "TestToken",
-      "TT",
-    ]);
+    const token = await hre.viem.deployContract('ERC20Mock', [
+      'TestToken',
+      'TT',
+    ])
 
     // Deploy InvestorNFT
     // Use deployer as the crowdfundAddress for test purposes
-    const investorNft = await hre.viem.deployContract("InvestorNFT", [
-      "Investor Share",
-      "INV",
+    const investorNft = await hre.viem.deployContract('InvestorNFT', [
+      'Investor Share',
+      'INV',
       deployer.account.address,
       deployer.account.address,
-    ]);
+    ])
 
     // Deploy Crowdfund with simple milestones for backwards compatibility
-    const fundingGoal = 100000000000000000000n; // 100 * 10^18 (100 tokens)
-    const duration = 3600n; // 1 hour
-    const milestoneDescriptions = ["Complete project"];
-    const milestonePayouts = [fundingGoal]; // Single milestone for entire amount
-    const crowdfund = await hre.viem.deployContract("Crowdfund", [
+    const fundingGoal = 100000000000000000000n // 100 * 10^18 (100 tokens)
+    const duration = 3600n // 1 hour
+    const milestoneDescriptions = ['Complete project']
+    const milestonePayouts = [fundingGoal] // Single milestone for entire amount
+    const crowdfund = await hre.viem.deployContract('Crowdfund', [
       token.address,
       fundingGoal,
       duration,
@@ -38,102 +38,114 @@ describe("Crowdfund with InvestorNFT integration", function () {
       deployer.account.address,
       deployer.account.address,
       1000n,
-    ]);
+    ])
 
     // Transfer ownership of InvestorNFT to Crowdfund
-    await investorNft.write.transferOwnership([crowdfund.address]);
+    await investorNft.write.transferOwnership([crowdfund.address])
 
     // Mint tokens to backer
-    await token.write.mint([backer.account.address, 1000000000000000000000n]); // 1000 tokens
+    await token.write.mint([backer.account.address, 1000000000000000000000n]) // 1000 tokens
 
-    return { crowdfund, token, investorNft, deployer, backer, attacker, fundingGoal };
+    return {
+      crowdfund,
+      token,
+      investorNft,
+      deployer,
+      backer,
+      attacker,
+      fundingGoal,
+    }
   }
 
-  it("mints an Investor NFT on pledge and assigns unique tokenId", async function () {
+  it('mints an Investor NFT on pledge and assigns unique tokenId', async function () {
     const { crowdfund, token, investorNft, backer } = await loadFixture(
-      deployCrowdfundWithNFTFixture
-    );
+      deployCrowdfundWithNFTFixture,
+    )
 
     // Backer approves and pledges
-    const pledgeAmount = 10000000000000000000n; // 10 tokens
+    const pledgeAmount = 10000000000000000000n // 10 tokens
     await token.write.approve([crowdfund.address, pledgeAmount], {
       account: backer.account,
-    });
+    })
 
     await crowdfund.write.pledge([pledgeAmount], {
       account: backer.account,
-    });
+    })
 
     // Check NFT minted: first tokenId is 1
-    expect(await investorNft.read.balanceOf([backer.account.address])).to.equal(1n);
+    expect(await investorNft.read.balanceOf([backer.account.address])).to.equal(
+      1n,
+    )
     expect(getAddress(await investorNft.read.ownerOf([1n]))).to.equal(
-      getAddress(backer.account.address)
-    );
-  });
+      getAddress(backer.account.address),
+    )
+  })
 
-  it("two pledges from same backer mint two distinct NFTs", async function () {
+  it('two pledges from same backer mint two distinct NFTs', async function () {
     const { crowdfund, token, investorNft, backer } = await loadFixture(
-      deployCrowdfundWithNFTFixture
-    );
+      deployCrowdfundWithNFTFixture,
+    )
 
-    const a = 5000000000000000000n; // 5 tokens
-    const b = 7000000000000000000n; // 7 tokens
+    const a = 5000000000000000000n // 5 tokens
+    const b = 7000000000000000000n // 7 tokens
     await token.write.approve([crowdfund.address, a + b], {
       account: backer.account,
-    });
+    })
 
-    await crowdfund.write.pledge([a], { account: backer.account });
-    await crowdfund.write.pledge([b], { account: backer.account });
+    await crowdfund.write.pledge([a], { account: backer.account })
+    await crowdfund.write.pledge([b], { account: backer.account })
 
-    expect(await investorNft.read.balanceOf([backer.account.address])).to.equal(2n);
+    expect(await investorNft.read.balanceOf([backer.account.address])).to.equal(
+      2n,
+    )
     expect(getAddress(await investorNft.read.ownerOf([1n]))).to.equal(
-      getAddress(backer.account.address)
-    );
+      getAddress(backer.account.address),
+    )
     expect(getAddress(await investorNft.read.ownerOf([2n]))).to.equal(
-      getAddress(backer.account.address)
-    );
-  });
+      getAddress(backer.account.address),
+    )
+  })
 
-  it("prevents unauthorized accounts from calling safeMint directly", async function () {
+  it('prevents unauthorized accounts from calling safeMint directly', async function () {
     const { investorNft, attacker } = await loadFixture(
-      deployCrowdfundWithNFTFixture
-    );
+      deployCrowdfundWithNFTFixture,
+    )
 
     await expect(
       investorNft.write.safeMint([attacker.account.address, 999n], {
         account: attacker.account,
-      })
-    ).to.be.rejectedWith("OwnableUnauthorizedAccount");
-  });
-});
+      }),
+    ).to.be.rejectedWith('OwnableUnauthorizedAccount')
+  })
+})
 
 /**
  * Fixture to deploy MockERC20 and Crowdfund (viem-based)
  */
 async function deployCrowdfundFixture() {
-  const [creator, backer, other] = await hre.viem.getWalletClients();
+  const [creator, backer, other] = await hre.viem.getWalletClients()
 
   // Deploy ERC20Mock
-  const mockToken = await hre.viem.deployContract("ERC20Mock", [
-    "Mock Token",
-    "MOCK",
-  ]);
+  const mockToken = await hre.viem.deployContract('ERC20Mock', [
+    'Mock Token',
+    'MOCK',
+  ])
 
   // Deploy InvestorNFT
   // Use creator as the crowdfundAddress for test purposes
-  const investorNft = await hre.viem.deployContract("InvestorNFT", [
-    "Investor Share",
-    "INV",
+  const investorNft = await hre.viem.deployContract('InvestorNFT', [
+    'Investor Share',
+    'INV',
     creator.account.address,
     creator.account.address,
-  ]);
+  ])
 
   // Deploy Crowdfund with simple milestones for backwards compatibility
-  const fundingGoal = 1000000000000000000000n; // 1000 tokens
-  const duration = 30n * 24n * 60n * 60n; // 30 days
-  const milestoneDescriptions = ["Complete project"];
-  const milestonePayouts = [fundingGoal]; // Single milestone for entire amount
-  const crowdfund = await hre.viem.deployContract("Crowdfund", [
+  const fundingGoal = 1000000000000000000000n // 1000 tokens
+  const duration = 30n * 24n * 60n * 60n // 30 days
+  const milestoneDescriptions = ['Complete project']
+  const milestonePayouts = [fundingGoal] // Single milestone for entire amount
+  const crowdfund = await hre.viem.deployContract('Crowdfund', [
     mockToken.address,
     fundingGoal,
     duration,
@@ -144,107 +156,116 @@ async function deployCrowdfundFixture() {
     creator.account.address,
     creator.account.address,
     1000n,
-  ]);
+  ])
 
   // Transfer ownership of InvestorNFT to Crowdfund
-  await investorNft.write.transferOwnership([crowdfund.address]);
+  await investorNft.write.transferOwnership([crowdfund.address])
 
   // Mint tokens to backer
-  await mockToken.write.mint([backer.account.address, 1000000000000000000000000n]); // 1,000,000 tokens
+  await mockToken.write.mint([
+    backer.account.address,
+    1000000000000000000000000n,
+  ]) // 1,000,000 tokens
 
-  return { crowdfund, mockToken, investorNft, creator, backer, other, fundingGoal };
+  return {
+    crowdfund,
+    mockToken,
+    investorNft,
+    creator,
+    backer,
+    other,
+    fundingGoal,
+  }
 }
 
-describe("Crowdfund", function () {
-  it("Should allow pledging during funding period", async function () {
+describe('Crowdfund', function () {
+  it('Should allow pledging during funding period', async function () {
     const { crowdfund, mockToken, backer } = await loadFixture(
-      deployCrowdfundFixture
-    );
-    const amount = 100000000000000000000n; // 100 tokens
+      deployCrowdfundFixture,
+    )
+    const amount = 100000000000000000000n // 100 tokens
 
     await mockToken.write.approve([crowdfund.address, amount], {
       account: backer.account,
-    });
-    await expect(
-      crowdfund.write.pledge([amount], { account: backer.account })
-    )
-      .to.emit(crowdfund, "Contribution")
-      .withArgs(backer.account.address, amount);
+    })
+    await expect(crowdfund.write.pledge([amount], { account: backer.account }))
+      .to.emit(crowdfund, 'Contribution')
+      .withArgs(backer.account.address, amount)
 
-    const contrib = await crowdfund.read.contributions([backer.account.address]);
-    expect(contrib.toString()).to.equal(amount.toString());
-  });
+    const contrib = await crowdfund.read.contributions([backer.account.address])
+    expect(contrib.toString()).to.equal(amount.toString())
+  })
 
-  it("Should allow the creator to claim funds if successful", async function () {
+  it('Should allow the creator to claim funds if successful', async function () {
     const { crowdfund, mockToken, investorNft, creator, backer, fundingGoal } =
-      await loadFixture(deployCrowdfundFixture);
+      await loadFixture(deployCrowdfundFixture)
 
     // Backer pledges the full goal amount
     await mockToken.write.approve([crowdfund.address, fundingGoal], {
       account: backer.account,
-    });
-    await crowdfund.write.pledge([fundingGoal], { account: backer.account });
+    })
+    await crowdfund.write.pledge([fundingGoal], { account: backer.account })
 
     // Move time forward past the deadline
-    await time.increase(time.duration.days(31));
+    await time.increase(time.duration.days(31))
 
     // Check campaign status to make it successful
-    await crowdfund.write.checkCampaignStatus();
+    await crowdfund.write.checkCampaignStatus()
 
     // Backer votes on the milestone (has 100% of votes)
-    await crowdfund.write.voteOnMilestone([0n], { account: backer.account });
+    await crowdfund.write.voteOnMilestone([0n], { account: backer.account })
 
     // Creator releases milestone funds (gets the full amount)
     const initialCreatorBalance = await mockToken.read.balanceOf([
       creator.account.address,
-    ]);
-    await crowdfund.write.releaseMilestoneFunds([0n], { account: creator.account });
+    ])
+    await crowdfund.write.releaseMilestoneFunds([0n], {
+      account: creator.account,
+    })
     const finalCreatorBalance = await mockToken.read.balanceOf([
       creator.account.address,
-    ]);
+    ])
 
     // The creator should have received the full funding goal through milestone release
-    expect(finalCreatorBalance - initialCreatorBalance).to.equal(fundingGoal);
+    expect(finalCreatorBalance - initialCreatorBalance).to.equal(fundingGoal)
 
     // After all milestones are released, the creator can claim remaining funds
     // In this test, all funds are released via milestone, so claimable should be 0
     await expect(crowdfund.write.claimFunds({ account: creator.account }))
-      .to.emit(crowdfund, "Finalization")
-      .withArgs(creator.account.address, 0n);
-  });
+      .to.emit(crowdfund, 'Finalization')
+      .withArgs(creator.account.address, 0n)
+  })
 
-  it("Should allow backers to get a refund if failed", async function () {
+  it('Should allow backers to get a refund if failed', async function () {
     const { crowdfund, mockToken, investorNft, backer } = await loadFixture(
-      deployCrowdfundFixture
-    );
-    const pledgeAmount = 100000000000000000000n; // 100 tokens
+      deployCrowdfundFixture,
+    )
+    const pledgeAmount = 100000000000000000000n // 100 tokens
 
     // Backer pledges, but not enough to meet the goal
     await mockToken.write.approve([crowdfund.address, pledgeAmount], {
       account: backer.account,
-    });
-    await crowdfund.write.pledge([pledgeAmount], { account: backer.account });
+    })
+    await crowdfund.write.pledge([pledgeAmount], { account: backer.account })
 
     // Move time forward past the deadline
-    await time.increase(time.duration.days(31));
+    await time.increase(time.duration.days(31))
 
     const initialBackerBalance = await mockToken.read.balanceOf([
       backer.account.address,
-    ]);
-    await expect(
-      crowdfund.write.claimRefund({ account: backer.account })
-    )
-      .to.emit(crowdfund, "Refund")
-      .withArgs(backer.account.address, pledgeAmount);
+    ])
+    await expect(crowdfund.write.claimRefund({ account: backer.account }))
+      .to.emit(crowdfund, 'Refund')
+      .withArgs(backer.account.address, pledgeAmount)
     const finalBackerBalance = await mockToken.read.balanceOf([
       backer.account.address,
-    ]);
+    ])
 
     expect((finalBackerBalance - initialBackerBalance).toString()).to.equal(
-      pledgeAmount.toString()
-    );
+      pledgeAmount.toString(),
+    )
     expect(
-      (await crowdfund.read.contributions([backer.account.address])).toString()
-    ).to.equal("0");
-  });
-});
+      (await crowdfund.read.contributions([backer.account.address])).toString(),
+    ).to.equal('0')
+  })
+})
