@@ -2,6 +2,27 @@ import hre from "hardhat";
 import type { InvestorNFT, Crowdfund, ERC20Mock } from "../typechain-types"; // Import contract types
 
 async function main() {
+    let network = hre.network.name;
+
+    // Check for --network flag in command line arguments
+    const networkFlagIndex = process.argv.indexOf("--network");
+    if (networkFlagIndex > -1 && process.argv.length > networkFlagIndex + 1) {
+        network = process.argv[networkFlagIndex + 1];
+    } else if (process.env.DEPLOY_NETWORK) {
+        network = process.env.DEPLOY_NETWORK;
+    }
+
+    // Validate network
+    const availableNetworks = Object.keys(hre.config.networks);
+    if (!availableNetworks.includes(network)) {
+        console.error(`Error: Invalid network specified: ${network}`);
+        console.error(`Please use --network <network-name> or set DEPLOY_NETWORK environment variable.`);
+        console.error(`Available networks: ${availableNetworks.join(", ")}`);
+        process.exit(1);
+    }
+
+    console.log(`Deploying to network: ${network}`);
+
     const [deployer, creator] = await hre.viem.getWalletClients();
     console.log("Deploying with", deployer.account.address);
 
