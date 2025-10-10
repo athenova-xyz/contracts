@@ -3,8 +3,13 @@
 
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 import { parseEther } from "viem";
+// import type { Lock } from "../../typechain-types/contracts/Lock"; // Temporarily comment out or remove until path is verified
 
-const JAN_1ST_2030 = 1893456000;
+interface LockModuleResults {
+  lock: any; // Temporarily use any until Lock type is resolved
+}
+
+const JAN_1ST_2030: number = 1893456000;
 const ONE_GWEI: bigint = parseEther("0.001");
 
 const LockModule = buildModule("LockModule", (m) => {
@@ -15,7 +20,7 @@ const LockModule = buildModule("LockModule", (m) => {
     value: lockedAmount,
   });
 
-  return { lock };
+  return { lock: lock };
 });
 
 export default LockModule;

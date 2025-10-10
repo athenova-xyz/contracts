@@ -1,18 +1,19 @@
 import hre from "hardhat";
+import type { InvestorNFT, Crowdfund, ERC20Mock } from "../typechain-types"; // Import contract types
 
 async function main() {
     const [deployer, creator] = await hre.viem.getWalletClients();
     console.log("Deploying with", deployer.account.address);
 
     // Deploy test token (or your real token) and mint if required
-    const token = await hre.viem.deployContract("ERC20Mock", [
+    const token: ERC20Mock = await hre.viem.deployContract("ERC20Mock", [
         "TestToken",
         "TT"
     ]);
     console.log("Token deployed:", token.address);
 
     // Deploy InvestorNFT
-    const investorNft = await hre.viem.deployContract("InvestorNFT", [
+    const investorNft: InvestorNFT = await hre.viem.deployContract("InvestorNFT", [
         "Investor Share",
         "INV",
         deployer.account.address
@@ -39,7 +40,7 @@ async function main() {
     // all milestones are released. Change milestones to exactly sum to the
     // fundingGoal if full allocation is required by your policy.
 
-    const crowdfund = await hre.viem.deployContract("Crowdfund", [
+    const crowdfund: Crowdfund = await hre.viem.deployContract("Crowdfund", [
         token.address,
         fundingGoal,
         duration,
