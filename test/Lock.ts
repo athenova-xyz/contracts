@@ -70,7 +70,16 @@ describe('Lock', function () {
         hre.viem.deployContract('Lock', [latestTime], {
           value: 1n,
         }),
-      ).to.be.rejectedWith('Unlock time should be in the future')
+      ).to.be.rejectedWith('Unlock time must be in the future')
+    })
+
+    it('Should fail if the unlockTime is exactly the current block timestamp (zero-duration lock)', async function () {
+      const latestTime = BigInt(await time.latest())
+      await expect(
+        hre.viem.deployContract('Lock', [latestTime], {
+          value: 1n,
+        }),
+      ).to.be.rejectedWith('Unlock time must be in the future')
     })
   })
 
@@ -85,7 +94,7 @@ describe('Lock', function () {
         } catch (err: any) {
           const msg = err?.message || err?.toString()
           expect(msg).to.match(
-            /You can't withdraw yet|An unknown RPC error occurred/,
+            /You can't withdraw yet/
           )
         }
       })
@@ -110,7 +119,7 @@ describe('Lock', function () {
         } catch (err: any) {
           const msg = err?.message || err?.toString()
           expect(msg).to.match(
-            /You aren't the owner|An unknown RPC error occurred/,
+            /You aren't the owner/
           )
         }
       })
