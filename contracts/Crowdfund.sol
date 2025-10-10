@@ -189,6 +189,9 @@ contract Crowdfund is ReentrancyGuard {
     event MintFailed(address indexed backer, uint256 tokenId);
     event MilestoneVoted(address indexed voter, uint256 indexed milestoneIndex, uint256 voteWeight);
     event MilestoneFundsReleased(uint256 indexed milestoneIndex, uint256 amount);
+    event Contribution(address indexed backer, uint256 amount);
+    event Refund(address indexed backer, uint256 amount);
+    event Finalization(address indexed creator, uint256 amount);
 
     // Platform governance is provided via constructor args
 
@@ -463,6 +466,7 @@ contract Crowdfund is ReentrancyGuard {
         }
 
         emit Pledged(msg.sender, actualReceived);
+        emit Contribution(msg.sender, actualReceived);
     }
 
     /**
@@ -563,6 +567,7 @@ contract Crowdfund is ReentrancyGuard {
         // use SafeERC20 to support non-standard tokens that do not return bool
         acceptedToken.safeTransfer(creator, claimable);
         emit FundsClaimed(creator, claimable);
+        emit Finalization(creator, claimable);
     }
 
     function claimRefund() public autoUpdateCampaignStatus nonReentrant {
@@ -579,5 +584,6 @@ contract Crowdfund is ReentrancyGuard {
         // use SafeERC20 to support non-standard tokens that do not return bool
         acceptedToken.safeTransfer(msg.sender, amountToRefund);
         emit RefundClaimed(msg.sender, amountToRefund);
+        emit Refund(msg.sender, amountToRefund);
     }
 }
