@@ -55,4 +55,17 @@ describe("CourseNFT", function () {
       contractAsOther.write.safeMint([owner.account.address, tokenId])
     ).to.be.rejectedWith("OwnableUnauthorizedAccount");
   });
+
+  it("Should measure gas for minting a token", async function () {
+    const { courseNFT, otherAccount } = await loadFixture(
+      deployCourseNFTFixture
+    );
+    const tokenId = 2n; // Use a different tokenId to avoid conflicts
+
+    const mintTx = await courseNFT.write.safeMint([otherAccount.account.address, tokenId]);
+    const receipt = await hre.viem.getPublicClient().getTransactionReceipt({ hash: mintTx });
+
+    console.log(`Gas used for minting CourseNFT: ${receipt.gasUsed.toString()}`);
+    expect(receipt.gasUsed).to.be.lessThan(300000n); // Example: Set an upper bound for gas, adjust as needed
+  });
 });
