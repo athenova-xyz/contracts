@@ -165,7 +165,11 @@ describe("Crowdfund", function () {
     await mockToken.write.approve([crowdfund.address, amount], {
       account: backer.account,
     });
-    await crowdfund.write.pledge([amount], { account: backer.account });
+    await expect(
+      crowdfund.write.pledge([amount], { account: backer.account })
+    )
+      .to.emit(crowdfund, "Contribution")
+      .withArgs(backer.account.address, amount);
 
     const contrib = await crowdfund.read.contributions([backer.account.address]);
     expect(contrib.toString()).to.equal(amount.toString());
@@ -201,6 +205,12 @@ describe("Crowdfund", function () {
 
     // The creator should have received the full funding goal through milestone release
     expect(finalCreatorBalance - initialCreatorBalance).to.equal(fundingGoal);
+
+    // After all milestones are released, the creator can claim remaining funds
+    // In this test, all funds are released via milestone, so claimable should be 0
+    await expect(crowdfund.write.claimFunds({ account: creator.account }))
+      .to.emit(crowdfund, "Finalization")
+      .withArgs(creator.account.address, 0n);
   });
 
   it("Should allow backers to get a refund if failed", async function () {
@@ -221,7 +231,11 @@ describe("Crowdfund", function () {
     const initialBackerBalance = await mockToken.read.balanceOf([
       backer.account.address,
     ]);
-    await crowdfund.write.claimRefund({ account: backer.account });
+    await expect(
+      crowdfund.write.claimRefund({ account: backer.account })
+    )
+      .to.emit(crowdfund, "Refund")
+      .withArgs(backer.account.address, pledgeAmount);
     const finalBackerBalance = await mockToken.read.balanceOf([
       backer.account.address,
     ]);
