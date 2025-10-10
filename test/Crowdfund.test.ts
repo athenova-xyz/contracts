@@ -11,6 +11,7 @@ describe("Crowdfund with InvestorNFT integration", function () {
     const token = await hre.viem.deployContract("ERC20Mock", [
       "TestToken",
       "TT",
+      18, // Default decimals
     ]);
 
     // Deploy InvestorNFT
@@ -105,6 +106,17 @@ describe("Crowdfund with InvestorNFT integration", function () {
       })
     ).to.be.rejectedWith("OwnableUnauthorizedAccount");
   });
+
+  it("ERC20Mock should accept and expose custom decimals", async function () {
+    const customDecimals = 6;
+    const tokenWithCustomDecimals = await hre.viem.deployContract("ERC20Mock", [
+      "CustomDecimalToken",
+      "CDT",
+      customDecimals,
+    ]);
+
+    expect(await tokenWithCustomDecimals.read.decimals()).to.equal(customDecimals);
+  });
 });
 
 /**
@@ -117,6 +129,7 @@ async function deployCrowdfundFixture() {
   const mockToken = await hre.viem.deployContract("ERC20Mock", [
     "Mock Token",
     "MOCK",
+    18, // Default decimals
   ]);
 
   // Deploy InvestorNFT
