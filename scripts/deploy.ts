@@ -1,88 +1,66 @@
-import hre from "hardhat";
-import type { InvestorNFT, Crowdfund, ERC20Mock } from "../typechain-types"; // Import contract types
+import hre from 'hardhat'
+import type { InvestorNFT, Crowdfund, ERC20Mock } from '../typechain-types' // Import contract types
 
 async function main() {
-    let network = hre.network.name;
+  const [deployer, creator] = await hre.viem.getWalletClients()
+  console.log('Deploying with', deployer.account.address)
 
-    // Check for --network flag in command line arguments
-    const networkFlagIndex = process.argv.indexOf("--network");
-    if (networkFlagIndex > -1 && process.argv.length > networkFlagIndex + 1) {
-        network = process.argv[networkFlagIndex + 1];
-    } else if (process.env.DEPLOY_NETWORK) {
-        network = process.env.DEPLOY_NETWORK;
-    }
+  // Deploy test token (or your real token) and mint if required
+  const token: ERC20Mock = await hre.viem.deployContract('ERC20Mock', [
+    'TestToken',
+    'TT',
+  ])
+  console.log('Token deployed:', token.address)
 
-    // Validate network
-    const availableNetworks = Object.keys(hre.config.networks);
-    if (!availableNetworks.includes(network)) {
-        console.error(`Error: Invalid network specified: ${network}`);
-        console.error(`Please use --network <network-name> or set DEPLOY_NETWORK environment variable.`);
-        console.error(`Available networks: ${availableNetworks.join(", ")}`);
-        process.exit(1);
-    }
+  // Deploy InvestorNFT
+  const investorNft: InvestorNFT = await hre.viem.deployContract(
+    'InvestorNFT',
+    ['Investor Share', 'INV', deployer.account.address],
+  )
+  console.log('InvestorNFT:', investorNft.address)
 
-    console.log(`Deploying to network: ${network}`);
+  // Deploy Crowdfund with investorNft address and milestones
+  const fundingGoal = 1000000000000000000000n // 1000 tokens (1000 * 10^18)
+  const duration = 7n * 24n * 3600n // 7 days
 
-    const [deployer, creator] = await hre.viem.getWalletClients();
-    console.log("Deploying with", deployer.account.address);
+  // Define milestones for deployment
+  const milestoneDescriptions = [
+    'Complete project development and testing',
+    'Deploy to production and launch',
+  ]
+  const milestonePayouts = [
+    600000000000000000000n, // 600 tokens for milestone 1
+    400000000000000000000n, // 400 tokens for milestone 2 (total = 1000)
+  ]
 
-    // Deploy test token (or your real token) and mint if required
-    const token: ERC20Mock = await hre.viem.deployContract("ERC20Mock", [
-        "TestToken",
-        "TT"
-    ]);
-    console.log("Token deployed:", token.address);
+  // Note: the contract allows total milestone payouts to be <= fundingGoal.
+  // Any leftover funds (fundingGoal - sum(milestonePayouts)) will remain in
+  // escrow and can be claimed by the creator through `claimFunds()` after
+  // all milestones are released. Change milestones to exactly sum to the
+  // fundingGoal if full allocation is required by your policy.
 
-    // Deploy InvestorNFT
-    const investorNft: InvestorNFT = await hre.viem.deployContract("InvestorNFT", [
-        "Investor Share",
-        "INV",
-        deployer.account.address
-    ]);
-    console.log("InvestorNFT:", investorNft.address);
+  const crowdfund: Crowdfund = await hre.viem.deployContract('Crowdfund', [
+    token.address,
+    fundingGoal,
+    duration,
+    creator.account.address,
+    investorNft.address,
+    milestoneDescriptions,
+    milestonePayouts,
+  ])
+  console.log('Crowdfund deployed:', crowdfund.address)
 
-    // Deploy Crowdfund with investorNft address and milestones
-    const fundingGoal = 1000000000000000000000n; // 1000 tokens (1000 * 10^18)
-    const duration = 7n * 24n * 3600n; // 7 days
+  // Transfer ownership of InvestorNFT to Crowdfund so only Crowdfund can mint
+  await investorNft.write.transferOwnership([crowdfund.address])
 
-    // Define milestones for deployment
-    const milestoneDescriptions = [
-        "Complete project development and testing",
-        "Deploy to production and launch"
-    ];
-    const milestonePayouts = [
-        600000000000000000000n, // 600 tokens for milestone 1
-        400000000000000000000n  // 400 tokens for milestone 2 (total = 1000)
-    ];
-
-    // Note: the contract allows total milestone payouts to be <= fundingGoal.
-    // Any leftover funds (fundingGoal - sum(milestonePayouts)) will remain in
-    // escrow and can be claimed by the creator through `claimFunds()` after
-    // all milestones are released. Change milestones to exactly sum to the
-    // fundingGoal if full allocation is required by your policy.
-
-    const crowdfund: Crowdfund = await hre.viem.deployContract("Crowdfund", [
-        token.address,
-        fundingGoal,
-        duration,
-        creator.account.address,
-        investorNft.address,
-        milestoneDescriptions,
-        milestonePayouts
-    ]);
-    console.log("Crowdfund deployed:", crowdfund.address);
-
-    // Transfer ownership of InvestorNFT to Crowdfund so only Crowdfund can mint
-    await investorNft.write.transferOwnership([crowdfund.address]);
-
-    console.log("Deployed:", {
-        token: token.address,
-        investorNft: investorNft.address,
-        crowdfund: crowdfund.address,
-    });
+  console.log('Deployed:', {
+    token: token.address,
+    investorNft: investorNft.address,
+    crowdfund: crowdfund.address,
+  })
 }
 
 main().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-});
+  console.error(error)
+  process.exitCode = 1
+})
