@@ -63,6 +63,15 @@ describe('Lock', function () {
       ).to.equal(lockedAmount)
     })
 
+    it('Should fail if the unlockTime is not strictly in the future (zero-duration lock)', async function () {
+      const latestTime = BigInt(await time.latest());
+      await expect(
+        hre.viem.deployContract('Lock', [latestTime], {
+          value: 1n,
+        }),
+      ).to.be.rejectedWith('Unlock time must be in the future');
+    });
+
     it('Should fail if the unlockTime is not in the future', async function () {
       // We don't use the fixture here because we want a different deployment
       const latestTime = BigInt(await time.latest())
@@ -81,7 +90,7 @@ describe('Lock', function () {
         }),
       ).to.be.rejectedWith('Unlock time must be in the future')
     })
-  })
+  });
 
   describe('Withdrawals', function () {
     describe('Validations', function () {
