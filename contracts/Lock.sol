@@ -12,7 +12,7 @@ contract Lock {
 
     constructor(uint _unlockTime) payable {
         require(
-            block.timestamp < _unlockTime,
+            _unlockTime > block.timestamp,
             "Unlock time must be in the future"
         );
 
